@@ -3,3 +3,26 @@ Source/.vs*
 Source/x64*
 MMFreeLyrics.zip
 *.tmp
+
+# 本地解包资料、历史交付及私有恢复快照只留磁盘，不进入源码版本库。
+/artifacts/
+/MikuMikuLibrary/
+/Work/
+
+# 配套 Python 依赖由本地快照保存，避免词典和平台运行库膨胀 Git。
+/tools/furigana_runtime/
+/tools/obs_runtime/
+
+# 可重新生成的编译及解释器缓存。
+__pycache__/
+*.py[cod]
+*.obj
+**/bin/
+**/obj/
+*.vcxproj.user
+
+# 本机 OBS 认证和运行日志不进入 Git；示例配置继续跟踪。
+obs-helper.json
+*.log
+.env
+.env.*

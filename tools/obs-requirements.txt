@@ -1,0 +1,2 @@
+# Helper 唯一第三方依赖；发行包附带 tools/obs_runtime，无需再安装。
+websocket-client==1.8.0

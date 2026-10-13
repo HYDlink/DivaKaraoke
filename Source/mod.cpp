@@ -1,6 +1,9 @@
-﻿#include <globals.h>
+#include <globals.h>
 #include <managers/font_manager.h>
 #include <managers/lyric_manager.h>
+#include <managers/non_vocal_manager.h>
+#include <managers/obs_manager.h>
+#include <imgui/imgui_internal.h>
 #pragma warning( disable : 26495 26812 )
 // Signatures
 SIG_SCAN
@@ -96,20 +99,29 @@ HOOK(char*, __fastcall, _LoadSongAudio, sigLoadSongAudio(),
 	float a7,
 	int a8)
 {
-	LyricManager_Inst.SetSongAudio(a3->c_str());
+	// 游戏原函数会消费传入字符串，必须在调用前保存独立路径。
+	const std::string audioPath = a3 ? *a3 : std::string();
+	LyricManager_Inst.SetSongAudio(audioPath.c_str());
 	char* result = original_LoadSongAudio(a1, a2, a3, a4, a5, a6, a7, a8);
+	// 加载完成后使用独立副本绑定歌曲对象，禁止读取已消费的 a3。
+	NonVocalManager_Inst.OnSongAudio(result == nullptr ? reinterpret_cast<void*>(a1) : nullptr,
+		result == nullptr ? audioPath.c_str() : nullptr);
+	// OBS 仅观察已有加载结果，不改变歌曲音频加载或增益。
+	if (result == nullptr) ObsManager_Inst.OnSongAudio(audioPath);
 	return result;
 }
 
 HOOK(INT64, __fastcall, _ChangeGameState, sigChangeGameState(), INT64* a, const char* state) {
+	// 状态切换可能释放歌曲对象，音频恢复必须在原函数之前完成。
+	NonVocalManager_Inst.OnGameState(state);
 	INT64 result = original_ChangeGameState(a, state);
 #ifdef _DEBUG
 	LOG(L"Gamestate changed to : %S", state);
 #endif // DEBUG
 	LyricManager_Inst.UpdateGameState(state);
+	ObsManager_Inst.OnGameState(state);
 	return result;
 }
-std::string lyricsBuffer;
 HOOK(void**, __fastcall, _RenderLyricAndTitle, sigRenderLyricAndTitle(),
 	float y,
 	float x,
@@ -120,11 +132,14 @@ HOOK(void**, __fastcall, _RenderLyricAndTitle, sigRenderLyricAndTitle(),
 	unsigned int a7,
 	void** a8)
 {
+	// 歌词文本缓冲仅在 hook 首次执行时创建，避免 DLL 装载期构造 std::string。
+	static std::string lyricsBuffer;
 	bool isLyric = y == 172.0f;
 	if (isLyric) {
-		lyricsBuffer = LyricManager_Inst.showInternalLyrics ? LyricManager_Inst.GetCurrentLyricLine() : "";
-		// Maintain a local copy in case the return value gets destoryed
-		return original_RenderLyricAndTitle(y, x, scale, a4, lyricsBuffer.c_str(), a6, a7, a8);
+		// 原版歌词开关仅控制游戏渲染文本，KTV 缓存层由独立开关控制。
+		lyricsBuffer = text ? text : "";
+		const char* displayedText = LyricManager_Inst.showInternalLyrics ? lyricsBuffer.c_str() : "";
+		return original_RenderLyricAndTitle(y, x, scale, a4, displayedText, a6, a7, a8);
 	}
 	else {
 		LyricManager_Inst.SetLyricLine(false, NULL);
@@ -254,6 +269,95 @@ void Config::LoadGlobalConfig() {
 		ImGui::LoadIniSettingsFromMemory(GlobalConfig_Inst.ImGuiSettings.c_str());
 }
 
+// 将游戏内实际扫描到的关键地址以稳定的 ASCII 格式落盘，供短启动后直接定位版本或初始化问题。
+void WriteSignatureDiagnostics() {
+	std::ofstream diagnostics(to_utf8(FullPathInDllFolder(L"freelyrics-diagnostics.log")), std::ios::trunc);
+	if (!diagnostics.is_open())
+		return;
+
+	diagnostics << "MMFreeLyrics signature diagnostics\n";
+	diagnostics << "sigChangeGameState=0x" << std::hex << (uint64_t)sigChangeGameStateAddr << "\n";
+	diagnostics << "sigRenderLyricAndTitle=0x" << std::hex << (uint64_t)sigRenderLyricAndTitleAddr << "\n";
+	diagnostics << "sigLoadSongAudio=0x" << std::hex << (uint64_t)sigLoadSongAudioAddr << "\n";
+	diagnostics << "sigUpdateLyrics=0x" << std::hex << (uint64_t)sigUpdateLyricsAddr << "\n";
+	diagnostics << "sigGetInputState=0x" << std::hex << (uint64_t)sigGetInputStateAddr << "\n";
+	diagnostics << "sigCopyCharsByCount=0x" << std::hex << (uint64_t)sigCopyCharsByCountAddr << "\n";
+	diagnostics << "sigPVDBLookup=0x" << std::hex << (uint64_t)sigPVDBLookupAddr << "\n";
+	diagnostics << "sigDivaPlayback=0x" << std::hex << (uint64_t)sigDivaPlaybackAddr << "\n";
+	diagnostics << "sigDivaPlayback2=0x" << std::hex << (uint64_t)sigDivaPlayback2Addr << "\n";
+	diagnostics << "sigPvSelectorApplySel=0x" << std::hex << (uint64_t)sigpv_selector_switch__PvSelector__applySelAddr << "\n";
+	diagnostics << "sigCreateTaskWaitScreen=0x" << std::hex << (uint64_t)sigMegaMix__CreateTaskWaitScreenAddr << "\n";
+	diagnostics.flush();
+}
+
+// 追加 Init 的阶段标记，便于在游戏提前退出后确定最后成功执行的位置。
+void WriteInitializationStage(const char* stage) {
+	std::ofstream diagnostics(to_utf8(FullPathInDllFolder(L"freelyrics-diagnostics.log")), std::ios::app);
+	if (diagnostics.is_open())
+		diagnostics << "stage=" << stage << "\n";
+}
+
+// 在 DivaModLoader 调用 Init 后扫描游戏模块并绑定全部 Hook 目标；任一签名缺失时拒绝安装，避免解引用空地址。
+bool InitializeGameAddresses() {
+	sigChangeGameState();
+	sigRenderLyricAndTitle();
+	sigLoadSongAudio();
+	sigUpdateLyrics();
+	sigGetInputState();
+	sigCopyCharsByCount();
+	sigPVDBLookup();
+	sigDivaPlayback();
+	sigDivaPlayback2();
+	sigpv_selector_switch__PvSelector__applySel();
+	sigMegaMix__CreateTaskWaitScreen();
+	WriteSignatureDiagnostics();
+	if (!sigChangeGameStateAddr || !sigRenderLyricAndTitleAddr || !sigLoadSongAudioAddr ||
+		!sigUpdateLyricsAddr || !sigGetInputStateAddr || !sigCopyCharsByCountAddr ||
+		!sigPVDBLookupAddr || !sigDivaPlaybackAddr || !sigDivaPlayback2Addr ||
+		!sigpv_selector_switch__PvSelector__applySelAddr || !sigMegaMix__CreateTaskWaitScreenAddr) {
+		LOG(L"游戏版本签名不完整，已跳过歌词 Hook 以避免游戏崩溃。");
+		return false;
+	}
+
+	original_ChangeGameState = (__ChangeGameState*)sigChangeGameStateAddr;
+	original_RenderLyricAndTitle = (__RenderLyricAndTitle*)sigRenderLyricAndTitleAddr;
+	original_LoadSongAudio = (__LoadSongAudio*)sigLoadSongAudioAddr;
+	original_UpdateLyrics = (__UpdateLyrics*)sigUpdateLyricsAddr;
+	original_GetInputState = (__GetInputState*)sigGetInputStateAddr;
+	original_CopyCharsByCount = (__CopyCharsByCount*)sigCopyCharsByCountAddr;
+	original_PVDBLookup = (__PVDBLookup*)sigPVDBLookupAddr;
+	original_DivaPlayback = (__DivaPlayback*)sigDivaPlaybackAddr;
+	getPlaybackStatus2 = (DivaPlaybackStatus2* (__fastcall*)())sigDivaPlayback2Addr;
+	getPvSelAddr = (PvSelector* (__fastcall*)())readRelCall16Address((uint64_t)sigpv_selector_switch__PvSelector__applySelAddr + 0x1D0);
+	return getPvSelAddr != nullptr;
+}
+
+// 工具窗口跟随歌词设置窗口右侧并顶部对齐，宽度适配内容，高度自动收紧。
+void DrawPvToolsPanel() {
+	if (!LyricManager_Inst.showGUI)
+		return;
+	const ImGuiViewport* viewport = ImGui::GetMainViewport();
+	const float margin = ImGui::GetStyle().ItemSpacing.x;
+	const float preferredWidth = ImGui::GetFontSize() * 34.0f;
+	ImVec2 panelPos(viewport->WorkPos.x + margin, viewport->WorkPos.y + margin);
+	float panelWidth = (std::min)(preferredWidth, viewport->WorkSize.x - margin * 2.0f);
+	if (const ImGuiWindow* lyricWindow = ImGui::FindWindowByName("Lyric [Ctrl+G]")) {
+		panelPos = ImVec2(lyricWindow->Pos.x + lyricWindow->Size.x + margin, lyricWindow->Pos.y);
+		const float rightSpace = viewport->WorkPos.x + viewport->WorkSize.x - panelPos.x - margin;
+		if (rightSpace >= ImGui::GetFontSize() * 22.0f)
+			panelWidth = (std::min)(preferredWidth, rightSpace);
+		else
+			panelPos = ImVec2(lyricWindow->Pos.x, lyricWindow->Pos.y + lyricWindow->Size.y + margin);
+	}
+	ImGui::SetNextWindowPos(panelPos, ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(panelWidth, 0.0f), ImGuiCond_Always);
+	ImGui::SetNextWindowBgAlpha(0.9f);
+	if (ImGui::Begin("PV 工具 [Ctrl+G]", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+		NonVocalManager_Inst.OnImGUI();
+		ObsManager_Inst.OnImGUI();
+	}
+	ImGui::End();
+}
 extern "C"
 {
 	void __declspec(dllexport) D3DInit(IDXGISwapChain* swapChain,
@@ -273,29 +377,58 @@ extern "C"
 		ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 	}
 	void __declspec(dllexport) Init() {
+		// 加载器已离开 loader lock 后才解析 DLL 路径，避免 DllMain 中分配字符串导致加载失败。
+		InitializeDllFilePath();
+		// 全局配置对象只在此处填充默认值，避免 DLL 装载期执行业务初始化。
+		GlobalConfig_Inst.LoadDefault();
+		if (!InitializeGameAddresses())
+			return;
 		INSTALL_HOOK(_ChangeGameState);
+		WriteInitializationStage("hook-change-game-state");
 		INSTALL_HOOK(_RenderLyricAndTitle);
+		WriteInitializationStage("hook-render-lyric-and-title");
 		INSTALL_HOOK(_LoadSongAudio);
+		WriteInitializationStage("hook-load-song-audio");
 		INSTALL_HOOK(_UpdateLyrics);
+		WriteInitializationStage("hook-update-lyrics");
 		INSTALL_HOOK(_GetInputState);
+		WriteInitializationStage("hook-get-input-state");
 		INSTALL_HOOK(_CopyCharsByCount);
+		WriteInitializationStage("hook-copy-chars-by-count");
 		INSTALL_HOOK(_PVDBLookup);
+		WriteInitializationStage("hook-pvdb-lookup");
 		INSTALL_HOOK(_DivaPlayback);
+		WriteInitializationStage("hook-diva-playback");
 		ImGui::CreateContext();
+		WriteInitializationStage("imgui-context");
 		SET_IMGUI_DEFAULT_FLAGS;
+		WriteInitializationStage("imgui-default-flags");
 		Config::LoadGlobalConfig();
+		WriteInitializationStage("config-load");
 		LyricManager_Inst.Init(GlobalConfig_Inst);
+		WriteInitializationStage("lyric-manager-init");
 		FontManager_Inst.Init(GlobalConfig_Inst);
+		WriteInitializationStage("font-manager-init");
 		// Prepare addresses from sigs
 		playbackStatus = new DivaPlaybackStatus; // acquried by the hook
+		WriteInitializationStage("playback-status-allocate");
 		playbackStatus2 = getPlaybackStatus2();
+		WriteInitializationStage("playback-status2-read");
 		pvsel = getPvSelAddr();
+		WriteInitializationStage("pv-selector-read");
 		PVWaitScreenInfo = (PVWaitScreenInfoStruct*)readLongMOVAddress(
 			(uint64_t)sigMegaMix__CreateTaskWaitScreenAddr + 0x34
 		);
+		WriteInitializationStage("wait-screen-read");
+		// 工具管理器在地址与 ImGui 就绪后初始化，功能默认关闭。
+		NonVocalManager_Inst.Init();
+		ObsManager_Inst.Init();
+		WriteInitializationStage("pv-tools-init");
 	}
 	void __declspec(dllexport) OnFrame(IDXGISwapChain* m_pSwapChain) {
 		LyricManager_Inst.OnFrame();
+		NonVocalManager_Inst.OnFrame();
+		ObsManager_Inst.OnFrame();
 		FontManager_Inst.OnFrame();
 
 		ImGui_ImplDX11_NewFrame();
@@ -304,6 +437,7 @@ extern "C"
 
 		LyricManager_Inst.OnImGUI();
 		FontManager_Inst.OnImGUI();
+		DrawPvToolsPanel();
 
 		ImGui::Render();
 		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());

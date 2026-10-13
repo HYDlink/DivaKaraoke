@@ -1,6 +1,17 @@
 #include <globals.h>
 #include <managers/font_manager.h>
 
+// 将 Windows 本地路径规范化为 TOML 可安全保存、跨平台可读取的正斜杠形式。
+std::string NormalizeFontConfigPath(std::string path) {
+	std::replace(path.begin(), path.end(), '\\', '/');
+	return path;
+}
+
+// 根据已部署 TTC 文件选择目标字形，避免集合默认字体与 UI 标注不一致。
+int ResolveFontFaceIndex(const std::string& path) {
+	const std::string fileName = FileNameFromPath(path);
+	return fileName == "01-dfp-heisei-maru-gothic-w4.ttc" || fileName == "02-dfp-maru-gothic-sb.ttc" ? 2 : 0;
+}
 void FontManager::Init(Config& cfg) {
 	if (!isInit) {
 		RefreshFontList();
@@ -8,6 +19,14 @@ void FontManager::Init(Config& cfg) {
 			fontnameWithCharset = &fontsAvailable[0];
 			fontnameDefault = &fontsAvailable[fontsAvailable.size() - 1];
 			// Assign default fonts by alphabetical order
+			// 优先选择部署的日文卡拉 OK 字体，避免默认 Arial 影响日文歌词外观。
+			for (int i = 0; i < fontsAvailable.size(); i++) {
+				if (FileNameFromPath(fontsAvailable[i]) == "00-dfg-heisei-gothic-w5.ttc") {
+					fontnameDefault = &fontsAvailable[i];
+					fontnameWithCharset = &fontsAvailable[i];
+					break;
+				}
+			}
 		}
 		FromConfig(cfg);
 		isInit = true;
@@ -17,12 +36,13 @@ void FontManager::Init(Config& cfg) {
 Config& FontManager::FromConfig(Config& cfg) {
 	// Fonts should be available. If not, fallback values are used.
 	for (int i = 0; i < fontsAvailable.size(); i++) {
-		if (fontsAvailable[i] == cfg.fontnameDefault) fontnameDefault = &fontsAvailable[i];
-		if (fontsAvailable[i] == cfg.fontnameWithCharset) fontnameWithCharset = &fontsAvailable[i];
+		if (NormalizeFontConfigPath(fontsAvailable[i]) == NormalizeFontConfigPath(cfg.fontnameDefault)) fontnameDefault = &fontsAvailable[i];
+		if (NormalizeFontConfigPath(fontsAvailable[i]) == NormalizeFontConfigPath(cfg.fontnameWithCharset)) fontnameWithCharset = &fontsAvailable[i];
 	}
 	// Font Styles
-	fontSize = cfg.fontSize;
-	fontSizeImGui = cfg.fontSizeImGui;
+	fontSize = (std::max)(10.0f, (std::min)(100.0f, cfg.fontSize));
+	// 限制界面字体图集尺寸，避免误设大字号后 DX11 无法创建字体纹理。
+	fontSizeImGui = (std::max)(10.0f, (std::min)(24.0f, cfg.fontSizeImGui));
 	isBold = cfg.isBold;
 	isItalic = cfg.isItalic;
 	ImGui::GetIO().FontGlobalScale = cfg.FontGlobalScale;
@@ -36,8 +56,8 @@ Config& FontManager::FromConfig(Config& cfg) {
 }
 Config& FontManager::ToConfig(Config& cfg) {
 	// Fonts are saved with filenames
-	cfg.fontnameDefault = *fontnameDefault;
-	cfg.fontnameWithCharset = *fontnameWithCharset;
+	cfg.fontnameDefault = NormalizeFontConfigPath(*fontnameDefault);
+	cfg.fontnameWithCharset = NormalizeFontConfigPath(*fontnameWithCharset);
 	// Font Styles
 	cfg.fontSize = fontSize;
 	cfg.fontSizeImGui = fontSizeImGui;
@@ -72,8 +92,12 @@ std::vector<std::string>& FontManager::RefreshFontList() {
 	try {
 		for (auto file : std::filesystem::directory_iterator(to_utf8(FullPathInDllFolder(L"fonts\\")))) {
 			std::wstring path = file.path();
+			const std::wstring fileName = file.path().filename().wstring();
+			// DFG POP Mix W5 字间距过紧，不纳入模组字体选择列表。
+			if (fileName.find(L"DFGPOPMix-W5") != std::wstring::npos || fileName.find(L"DFPPOPMix-W5") != std::wstring::npos)
+				continue;
 			std::wstring ext = path.substr(path.length() - 3);
-			if (ext == L"ttf" || ext == L"otf") {
+			if (ext == L"ttf" || ext == L"otf" || ext == L"ttc") {
 				fontsAvailable.push_back(to_utf8(path));
 			}
 		}
@@ -107,29 +131,35 @@ void FontManager::RebuildFonts() {
 	ImFontConfig config;
 	config.SizePixels = fontSizeImGui;
 	io.Fonts->AddFontDefault(&config);
+	// 新增中文工具面板使用系统雅黑字形，只合并到固定字号的界面字体。
+	if (std::filesystem::exists(L"C:\\Windows\\Fonts\\msyh.ttc")) {
+		ImFontConfig uiConfig;
+		uiConfig.MergeMode = true;
+		// 常用中文范围不含所有工具文字，补齐两项模块的中文字符，避免显示问号。
+		ImFontGlyphRangesBuilder uiBuilder;
+		uiBuilder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+		uiBuilder.AddText(u8"一下不与专丢中为主义乐事于交人仅仍以件会伴似体使例供依保信修停允先免入关具内再准凑出函分则初别到制前功加动化匹单即卸历原去及反发取受变口另只可台史号同名后听启周命和回因固在地址均坏基增声复外失奏始字存安完定实容密对将就尾局工已帧常并序应延建开异弃式当录径待心快态恢感戏成或户所才执找护拒拥择持损换接控提播支收改放效数整新无既旧时明是显暂曲更有期未本机束条来果查标校核检模次歌止此步段每求汇没法测消淡混游源点热然照版状狗独猜理生用由界留的益盖目相看真知码确示离秒程立等签管紧约级纳线终绑结绝继绪续编置而联能自菜行补装覆认许设证词试话语误请读调象败资赏赖起超足路跳身轨转载辑边过运进连迟退送适选逐通逻道避部都配释重量鉴错门闭限除隔静非音项频题驻验默" );
+		static ImVector<ImWchar> uiRanges;
+		uiBuilder.BuildRanges(&uiRanges);
+		io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\msyh.ttc", fontSizeImGui,
+			&uiConfig, uiRanges.Data);
+
+	}
 	// Setting up styles
-	config.ShadowOffset = shadowOffset;
-	config.StrokeSize = strokeSize;
 	if (isBold) config.FontBuilderFlags |= ImGuiFreeTypeBuilderFlags_Bold;
 	if (isItalic) config.FontBuilderFlags |= ImGuiFreeTypeBuilderFlags_Oblique;
-	config.StrokeColor = VEC4_TO_COL32(strokeColor);
-	config.FillColor = VEC4_TO_COL32(fillColor);
-	config.ShadowColor = VEC4_TO_COL32(shadowColor);
 	LOG(L"Now rebuilding fonts atlas,please wait...");
+	// 歌词图集按当前输出分辨率生成；ImGui 控制面板仍保持固定字号。
+	const float lyricAtlasFontSize = fontSize * lyricAtlasScale;
 	if (fontnameDefault) {
+		config.FontNo = ResolveFontFaceIndex(*fontnameDefault);
 		io.Fonts->AddFontFromFileTTF(
 			fontnameDefault->c_str(),
-			fontSize,
+			lyricAtlasFontSize,
 			&config, // Merge into this font.
 			io.Fonts->GetGlyphRangesDefault()
 		);
 		config.MergeMode = true;
-		io.Fonts->AddFontFromFileTTF(
-			fontnameDefault->c_str(),
-			fontSize,
-			&config,
-			io.Fonts->GetGlyphRangesJapanese()
-		);
 	}
 	ImVector<ImWchar> ranges;
 	ImFontGlyphRangesBuilder builder;
@@ -139,15 +169,15 @@ void FontManager::RebuildFonts() {
 		builder.AddText(to_utf8(charset_buffer).c_str());
 	}
 	else {
-		LOG(L"Using fallback charset (Japanese / Romal) since custom charset isn't loaded.");
+		LOG(L"使用基础字符集等待歌词字符进入图集，避免高分辨率下构建完整日文图集。");
 		builder.AddRanges(io.Fonts->GetGlyphRangesDefault());
-		builder.AddRanges(io.Fonts->GetGlyphRangesJapanese());
 	}
 	builder.BuildRanges(&ranges);
 	if (fontnameWithCharset) {
+		config.FontNo = ResolveFontFaceIndex(*fontnameWithCharset);
 		font = io.Fonts->AddFontFromFileTTF(
 			fontnameWithCharset->c_str(),
-			fontSize,
+			lyricAtlasFontSize,
 			&config,
 			&ranges[0]
 		);
@@ -156,19 +186,26 @@ void FontManager::RebuildFonts() {
 	LOG(L"Built font atlas.");
 }
 
+/* 以 1080p 为基准确定歌词物理字号，分辨率改变时安排下一帧重建高分辨率图集。 */
+void FontManager::UpdateKtvResolutionScale(const ImVec2& viewportSize) {
+	if (viewportSize.y <= 0.0f)
+		return;
+	const float targetScale = (std::max)(0.75f, (std::min)(2.0f, viewportSize.y / 1080.0f));
+	if (fabsf(targetScale - lyricAtlasScale) < 0.01f)
+		return;
+	lyricAtlasScale = targetScale;
+	reloadFonts = true;
+	LOG(L"歌词字体图集将按 %.2fx 输出倍率重建。", lyricAtlasScale);
+}
+
 /* Called by DX Hook's OnFrame. Do not override.*/
 void FontManager::OnFrame() {
+	UpdateKtvResolutionScale(ImGui::GetIO().DisplaySize);
 	if (reloadFonts) {
-		// ImGUI Dx11 Implmentation doesn't reload font textures automatically
-		// Force it to do so by recreating the context
-		ImGui_ImplDX11_Shutdown();
-		ImGui::DestroyContext(ImGui::GetCurrentContext());
-		ImGui::CreateContext();
-		SET_IMGUI_DEFAULT_FLAGS;
+		// 字体图集改变前仅释放 DX11 后端对象，保留 ImGui 上下文与窗口状态。
+		ImGui_ImplDX11_InvalidateDeviceObjects();
 		RebuildFonts();
-		ImGui_ImplWin32_Init(window);
-		ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
-		Config::LoadGlobalConfig();
+		// 下一帧的 ImGui_ImplDX11_NewFrame 会自动上传新图集纹理。
 		reloadFonts = false;
 	}
 }
@@ -218,7 +255,7 @@ void FontManager::OnImGUI() {
 	ImGui::Text("Font Size");
 	ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "WARNING : Going for a large font size might crash the texture creation procedure!");
 	ImGui::SliderFloat("Font Size", &fontSize, 10, 100, "%.1f");
-	ImGui::SliderFloat("ImGui Font Size", &fontSizeImGui, 10, 80, "%.1f");
+	ImGui::SliderFloat("ImGui Font Size", &fontSizeImGui, 10, 24, "%.1f");
 	ImGui::SliderInt("Stroke Size", &strokeSize, 0, 10);
 
 	ImGui::Separator();
@@ -249,4 +286,9 @@ void FontManager::OnImGUI() {
 	}
 	ImGui::End();
 }
-FontManager FontManager_Inst;
+// 延后字体管理器的实际构造，确保它不在 Windows loader lock 内运行。
+FontManager& GetFontManager() {
+	static FontManager manager;
+	return manager;
+}
+

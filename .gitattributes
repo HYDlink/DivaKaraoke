@@ -1,0 +1,4 @@
+
+# Windows 命令脚本统一使用 CRLF，避免 CMD 错误解析 UTF-8 中文行。
+*.cmd text eol=crlf
+*.bat text eol=crlf

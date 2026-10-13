@@ -1,6 +1,12 @@
 #include <globals.h>
 
-inline std::wstring DllFilePath;
+inline HMODULE DllModuleHandle = NULL;
+inline wchar_t DllFilePathBuffer[512] = { 0 };
+
+// 在加载器调用 Init 后再创建路径字符串，避免在 Windows loader lock 内分配 C++ 字符串。
+inline void InitializeDllFilePath() {
+	GetModuleFileNameW(DllModuleHandle, DllFilePathBuffer, 512);
+}
 
 inline std::wstring u8string_to_wide_string(char* src)
 {
@@ -36,7 +42,8 @@ inline std::wstring to_wstr(std::string utf8) {
 }
 
 inline std::wstring FullPathInDllFolder(std::wstring fileName) {
-	std::wstring path = DllFilePath.substr(0, DllFilePath.find_last_of(L"/\\")) + L"\\" + fileName;
+	const std::wstring dllFilePath(DllFilePathBuffer);
+	std::wstring path = dllFilePath.substr(0, dllFilePath.find_last_of(L"/\\")) + L"\\" + fileName;
 	return path;
 }
 

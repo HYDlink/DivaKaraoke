@@ -4,12 +4,12 @@ BOOL APIENTRY DllMain(HMODULE hModule,
 	LPVOID lpReserved
 )
 {
-	wchar_t _buffer[512] = { 0 };
 	switch (ul_reason_for_call)
 	{
 	case DLL_PROCESS_ATTACH:
-		GetModuleFileNameW(hModule, _buffer, 512);
-		DllFilePath.assign(_buffer);
+		// DllMain 只保存句柄；任何 C++ 对象初始化均延后到 Init，避开 loader lock。
+		DllModuleHandle = hModule;
+		DisableThreadLibraryCalls(hModule);
 		break;
 	case DLL_THREAD_ATTACH:
 	case DLL_THREAD_DETACH:

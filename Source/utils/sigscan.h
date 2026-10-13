@@ -8,7 +8,7 @@ extern void* sigScan(const char* signature, const char* mask, void* hint = nullp
 
 #define SIG_SCAN(x, y, ...) \
     inline void* x(); \
-    inline void* x##Addr = x(); \
+    inline void* x##Addr = nullptr; \
     inline void* x() \
     { \
         constexpr const char* x##Data[] = { __VA_ARGS__ }; \

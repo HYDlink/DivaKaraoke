@@ -1,4 +1,12 @@
 # Hatsune Miku Project Diva Mega Mix+ (M39's+) FreeType Lyrics Renderer Mod
+
+本地录制展示里程碑、保存范围与恢复操作见 [本地版本记录与恢复](docs/LOCAL_VERSIONING.md)。当前仅保存本地版本，上游许可仍待确认。
+
+当前本机 OBS 启动、连接故障处理及唯一日常入口见 [OBS 连接器说明](docs/OBS_CONNECTOR.md)。`artifacts/*/package` 是历史发布快照，其中的启动器不作为日常入口。
+
+
+当前本机 OBS 启动、连接故障处理及唯一日常入口见 [OBS 连接器说明](docs/OBS_CONNECTOR.md)。`artifacts/*/package` 是历史发布快照，其中的启动器不作为日常入口。
+
 <div display="grid">
 <img style="width:45%" src="https://user-images.githubusercontent.com/31397301/189489519-19a77a4f-d947-4201-96fa-ae1f086ff787.png" />
 <img style="width:45%" src="https://user-images.githubusercontent.com/31397301/189489555-3f567519-b33d-4244-806f-524eb562a1c7.png" />

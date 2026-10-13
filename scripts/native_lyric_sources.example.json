@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "name": "资料包名称",
+      "cpk": "E:/游戏或模组/资料包.cpk",
+      "extract_dir": "F:/DivaLyrics/资料包-extract",
+      "rom_relative": "rom_steam/rom",
+      "pv_db": "E:/游戏或模组/已提取文本表/pv_db.txt",
+      "output_dir": "F:/DivaLyrics/native-caches/资料包",
+      "report": "F:/DivaLyrics/native-caches/资料包-report.json",
+      "reuse_extracted": true
+    }
+  ]
+}

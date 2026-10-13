@@ -31,6 +31,21 @@ public:
 	int lyricPivotStyle;
 	ImVec2 lyricPivotOffset;
 	std::string lyricFormat;
+	// KTV ワイプ渲染
+	ImVec4 ktvBeforeFillColor;
+	ImVec4 ktvBeforeStrokeColor;
+	ImVec4 ktvBeforeShadowColor;
+	ImVec4 ktvAfterFillColor;
+	ImVec4 ktvAfterStrokeColor;
+	ImVec4 ktvAfterShadowColor;
+	float ktvCurrentColumnX;
+	float ktvNextColumnX;
+	float ktvCurrentRowY;
+	float ktvNextRowY;
+	int ktvPreCueMs;
+	int ktvNativeWipeEstimateMs;
+	bool ktvWipeEnabled;
+	bool ktvPreviewEnabled;
 	// ImGui Styles
 	float WindowBorderSize;
 	float WindowRounding;
@@ -39,12 +54,12 @@ public:
 	toml::value config;
 
 	void LoadDefault();
-	Config() {
-		LoadDefault();
-	}
+	Config() = default;
 	bool Save();
 	bool Load();
 	static void SaveGlobalConfig();
 	static void LoadGlobalConfig();
 };
-extern Config GlobalConfig_Inst;
+// 首次使用时创建配置对象，避免 DLL 装载期构造含 STL/TOML 成员的全局对象。
+Config& GetGlobalConfig();
+#define GlobalConfig_Inst GetGlobalConfig()

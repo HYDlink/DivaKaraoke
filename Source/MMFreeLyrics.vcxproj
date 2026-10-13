@@ -216,6 +216,7 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <Optimization>MaxSpeed</Optimization>
       <DebugInformationFormat>None</DebugInformationFormat>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -255,7 +256,7 @@ del "$(OutputPath)*.lib"</Command>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
     <PostBuildEvent>
-      <Command>7z a "$(SolutionDir)..\MMFreeLyrics.zip" "$(OutputPath)*.dll" "$(SolutionDir)..\config.toml" "$(SolutionDir)..\README.md"</Command>
+      <Command>7z a "$(SolutionDir)..\MMFreeLyrics.zip" "$(OutputPath)*.dll" "$(SolutionDir)..\config.toml" "$(SolutionDir)..\README.md" "$(SolutionDir)..\THIRD_PARTY_NOTICES.md"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -271,6 +272,11 @@ del "$(OutputPath)*.lib"</Command>
     <ClInclude Include="..\Dependencies\srtparser\srtparser.h" />
     <ClInclude Include="managers\font_manager.h" />
     <ClInclude Include="managers\lyric_manager.h" />
+    <ClInclude Include="managers\ktv_timing.h" />
+    <ClInclude Include="managers\ktv_composite.h" />
+    <ClInclude Include="managers\ktv_geometry.h" />
+    <ClInclude Include="managers\non_vocal_manager.h" />
+    <ClInclude Include="managers\obs_manager.h" />
     <ClInclude Include="globals.h" />
     <ClInclude Include="constant.h" />
     <ClInclude Include="utils\config.h" />
@@ -309,11 +315,6 @@ del "$(OutputPath)*.lib"</Command>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Build Mod Archive|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\Dependencies\imgui\misc\cpp\imgui_stdlib.cpp" />
-    <ClCompile Include="..\Dependencies\imgui\misc\freetype\imgui_freetype.cpp">
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
-      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Build Mod Archive|x64'">NotUsing</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="dllmain.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Build Mod Archive|x64'">NotUsing</PrecompiledHeader>
@@ -324,6 +325,8 @@ del "$(OutputPath)*.lib"</Command>
     <ClCompile Include="managers\lyric_manager.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Build Mod Archive|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="managers\non_vocal_manager.cpp" />
+    <ClCompile Include="managers\obs_manager.cpp" />
     <ClCompile Include="mod.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Build Mod Archive|x64'">NotUsing</PrecompiledHeader>

@@ -19,14 +19,14 @@ const HMODULE MODULE_HANDLE = GetModuleHandle(nullptr);
 #endif
 
 #define FUNCTION_PTR(returnType, callingConvention, function, location, ...) \
-	returnType (callingConvention *function)(__VA_ARGS__) = (returnType(callingConvention*)(__VA_ARGS__))(location)
+	returnType (callingConvention *function)(__VA_ARGS__) = nullptr
 
 #define PROC_ADDRESS(libraryName, procName) \
 	GetProcAddress(LoadLibrary(TEXT(libraryName)), procName)
 
 #define HOOK(returnType, callingConvention, functionName, location, ...) \
 	typedef returnType callingConvention _##functionName(__VA_ARGS__); \
-	_##functionName* original##functionName = (_##functionName*)(location); \
+	_##functionName* original##functionName = nullptr; \
 	returnType callingConvention implOf##functionName(__VA_ARGS__)
 
 #define INSTALL_HOOK(functionName) \

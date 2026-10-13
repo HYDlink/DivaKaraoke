@@ -1,9 +1,9 @@
 [submodule "Dependencies/imgui"]
 	path = Dependencies/imgui
-	url = https://github.com/mos9527/imgui
+	url = https://github.com/ocornut/imgui.git
 [submodule "Dependencies/toml11"]
 	path = Dependencies/toml11
 	url = https://github.com/ToruNiina/toml11
 [submodule "Dependencies/srtparser"]
 	path = Dependencies/srtparser
-	url = https://github.com/mos9527/srtparser
+	url = https://github.com/saurabhshri/simple-yet-powerful-srt-subtitle-parser-cpp.git
