@@ -93,10 +93,16 @@ if (Test-Path -LiteralPath $snapshotRoot) { throw '快照目录已存在，请�
 New-Item -ItemType Directory -Path $snapshotRoot | Out-Null
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archiveRecords = [Collections.Generic.List[object]]::new()
-Save-ArchiveRecord -Name 'installed-mod-private' -Root $GameModDirectory -Includes @(
+$installedIncludes = @(
     'MMFreeLyrics.dll', 'config.toml', 'freelyrics.toml', 'lyrics', 'fonts', 'tools', 'scripts',
     'docs', 'MikuMikuLibrary', 'artifacts'
 )
+# 新增功能的根目录配置与匹配符号按实际存在情况保存，旧安装仍可使用快照工具。
+foreach ($relative in @('MMFreeLyrics.pdb', 'singer-colors.toml', 'audio-tools.toml', 'obs-tools.toml',
+    'singer-mvp-manifest.json', 'OBS_CONNECTOR.md', '部署报告.json', '验收说明.md')) {
+    if (Test-Path -LiteralPath (Join-Path $GameModDirectory $relative)) { $installedIncludes += $relative }
+}
+Save-ArchiveRecord -Name 'installed-mod-private' -Root $GameModDirectory -Includes $installedIncludes
 Save-ArchiveRecord -Name 'workspace-support' -Root $repoRoot -Includes @(
     'MikuMikuLibrary', 'tools/furigana_runtime', 'tools/obs_runtime',
     'artifacts/Open-PD-Script-Editor', 'artifacts/installed-native-lyric-sources.json'

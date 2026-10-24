@@ -1,5 +1,37 @@
 # 当前交接：PV424 官方 DLC 时间线
 
+## 最新入口：逐字歌词制作方案（2026-10-25）
+
+用户明确要以现有SRT及读音/口型离线自动生成字级时间，保留行级显示和歌手颜色职责，不依赖LLM逐字标歌。制作顺序与格式见CHARACTER_TIMING_PLAN.md及PLAN.md顶部C0–C7。首版采用SRT加timing.tsv/audit.json，整数毫秒；真实起止误差尚未测，P50≤50ms/P95≤100ms只是研发目标。下一最小实现是C0合同/样例及C1显式PV045自动候选生成；先不改DLL或全库生成。既有研究已验证24句中17句类别同序、首句17个候选与四难度口型一致，但未解决全曲真实起止。方案已经完成，生产生成器/加载器/逐字渲染尚未实现。
+
+## 最新入口：单曲 PV 结束自动保存（2026-10-18）
+
+已按现场 GameResultTask 修复自然结束不停止OBS，结束快照在原状态切换前异步发布，后台即时唤醒，人工暂停保留同一录制。生产管理器/Helper/歌词回归与DLL构建装载通过，4份文件已备份、直接部署并核对哈希，现有配置保持；详见STATUS.md及OBS_CONNECTOR.md。下一项为普通单曲在结束画面自动StopRecord、重播与尾帧的实际游戏验收；PV_END提前量预测仍未实现。
+
+## 最新交付：自动扫描全量多歌手与独立人工修订
+
+2026-10-15用户要求的工具集成已完成并直接部署。默认歌词导出自动扫描全部最终有效PV，不再写死六曲名单；309首中62首多身份候选生成、239首同身份跳过、8首角色资料不完整。完整输出与仅歌手补齐均验证，62首生产C++加载器通过；1113份运行时文件及工具缓存独立核对，安装目录真实CMD短入口成功。
+
+人工文件与cache分开，位于游戏mods/MMFreeLyrics/artifacts/exported-lyrics/manual-singers/PVnnn.singers.manual.tsv，只改第四列auto/LEN/KAI/LEN,KAI/-。用户考虑自行标erase or zero，正式模板仍为auto，Agent没有填写人工声部。改后双击tools/apply_singer_marks.cmd重算并安装；严格时间/全文绑定，旧模板不覆盖，审计区分自动与人工。
+
+文档docs/SINGER_EXPORT_WORKFLOW.md；工作区artifacts/singer-full-export/cache、manual-singers；部署/验证记录同目录deployment.json、validation.json。DLL仍FD686BCAD8CCACD3FF1C0F6B10A8241F799EAD50B4993BC8CA6F40DD67FE858E，保留三种颜色方案记录；本轮没有改渲染、口型阈值或逆向集成。LOGIC / DEPLOYMENT / CMD VERIFIED；声部真实准确率不因此宣称已验证。
+
+## 最新交付：合唱上下双色可回退试用
+
+2026-10-14 用户暂选上下双色，但认为视觉只是勉强、功能性好；保留三方案和图片供以后改方案二。方案二原位置有预热省略号，尚未实现。上下试用默认开启，Ctrl+G→Lyric→逐行歌手颜色可取消「上下双色」回到原横向渐变；方向存chorus_vertical，现有四色与阴影不变。
+
+正文及注音按自身实际高度取色，20%窄过渡使用既有精细裁剪和UV插值；无新shader、Hook或口型规则变更。字体/UV/面积/索引/透明/配置回归、Release/x64和独立装载通过。游戏退出后15份文件已备份、直接部署并独立复核哈希。DLL FD686BCAD8CCACD3FF1C0F6B10A8241F799EAD50B4993BC8CA6F40DD67FE858E；记录artifacts/singer-mvp/vertical-deployment.json。三方案记录docs/CHORUS_COLOR_DESIGNS.md。BUILD / LOGIC / DEPLOYMENT VERIFIED；上下游戏视觉仍待验收。
+
+## 最新交付：逐行歌手四色与合唱渐变MVP
+
+用户已授权并完成实现、统一构建和本机直接部署，下一步由用户游戏内验收。现有歌词/字体/OBS保留。按Ctrl+G进入Lyric的“逐行歌手颜色”，第一、第二歌手完整四色及阴影默认展开，提供合唱渐变/融合纯色和即时预览。配置 singer-colors.toml，自动标记旁路 PVnnn.singers.tsv，支持按身份扩展及多人组合。
+
+通用生成器 scripts/build_singer_timeline.py 与 tools/build_singer_colors.cmd 可复用，无需Agent，不解包。当前六首为PV041、062、728、802、611、268；用户确认愛Dee39–42正文初音/括号巡音，自动标记一致。用户确认erase or zero剧情MV存在无声口型，自动标签只能作推测；其29行保留默认。Catch the Wave六槽合并MIK，erase第三复制LEN槽不计新歌手。
+
+BUILD/LOGIC/DEPLOYMENT VERIFIED；游戏内颜色/渐变/面板效果仍待验收。DLL SHA-256 01F2C9E562671C954B83BAA3E6178F0F402E2A9F341F69DC97192560A7554E21；备份 artifacts/deployment-backups/singer-mvp-20261014-003456；记录 artifacts/singer-mvp/deployment.json。完整说明 docs/SINGER_COLORS_MVP.md。本轮没有实现字级口型对齐、真实音频识别或新的内存逆向。
+
+
+
 全量导出与部署完成（2026-10-10）：用户明确授权后，按当前有效9来源重新生成309首完整SRT/Ruby/审计，无新解包。927份安装文件哈希全通过；最新版界面修复DLL已替换游戏，哈希1377E54A2DB0D3A4AE091FE7146E2E9C13AF320CF78EB2B817AFF7B99FDE1DED；配套工具和Janome依赖已同步，现有配置/字体与OBS密码保持。旧322首经当前文件和原生成来源哈希重核后迁移所有权，回收13份当前未启用DLC来源的旧SRT；原DLL、全部歌词与注音、配置已备份。PV424注音与已验收文件一致。BUILD VERIFIED / LOGIC VERIFIED / DEPLOYMENT VERIFIED；新面板视觉与PV809注音、音频、真实录像仍由用户游戏验收。98行需读音复核，其中44行58字未确认，见审计。下方暂缓部署记录已由本次授权和部署替代。
 
 

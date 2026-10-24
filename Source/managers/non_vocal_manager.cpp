@@ -1,4 +1,5 @@
 #include <managers/non_vocal_manager.h>
+#include <managers/non_vocal_support.h>
 #include <Psapi.h>
 
 namespace {
@@ -98,6 +99,7 @@ void NonVocalManager::OnSongAudio(void* music, const char* path) {
     std::lock_guard<std::mutex> lock(mutex);
     songMusic = nullptr;
     applied = false;
+    knownUnsupportedAudio = false;
     if (!installed || !path || !*path || !IsReadableMusic(music))
         return;
     // 只接受歌曲路径，避免将标题、菜单或 SE 使用的音乐对象纳入控制。
@@ -106,6 +108,7 @@ void NonVocalManager::OnSongAudio(void* music, const char* path) {
     if (songPath.find("sound/song/") == std::string::npos && songPath.find("pv_") == std::string::npos)
         return;
     songMusic = music;
+    knownUnsupportedAudio = IsConfirmedNonVocalException(songPath);
     const auto bytes = reinterpret_cast<const unsigned char*>(music);
     for (int pair = 0; pair < 4; ++pair) {
         // 0x0C 的曲目增益与 0x1C 的声道主增益由本机 map 反汇编证实，非猜测字段。
@@ -130,6 +133,7 @@ void NonVocalManager::OnGameState(const char* state) {
         originalPairVolume(songMusic, 3, requestedGain[3]);
     }
     songMusic = nullptr;
+    knownUnsupportedAudio = false;
     pending = false;
     applied = false;
 }
@@ -171,25 +175,54 @@ bool NonVocalManager::IsNonVocalApplied() {
 
 // 独立 TOML 不修改历史歌词配置，默认关闭。
 bool NonVocalManager::SaveSettings() {
+    bool savedEnabled;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        savedEnabled = enabled;
+    }
     std::ofstream output(FullPathInDllFolder(L"audio-tools.toml"), std::ios::binary | std::ios::trunc);
     if (!output)
         return false;
     output << "# 人声静音：仅对标准伴奏/人声分轨歌曲有效。\nnon_vocal_enabled = "
-        << (enabled ? "true" : "false") << "\n";
+        << (savedEnabled ? "true" : "false") << "\n";
     return static_cast<bool>(output);
 }
 
 // 显示真实 Hook 状态，并明确立体声混音无法独立去人声。
 void NonVocalManager::OnImGUI() {
-    std::lock_guard<std::mutex> lock(mutex);
+    bool uiInstalled, uiEnabled, uiHasSong, uiKnownUnsupported;
+    std::string uiStatus;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        uiInstalled = installed;
+        uiEnabled = enabled;
+        uiHasSong = songMusic != nullptr;
+        uiKnownUnsupported = knownUnsupportedAudio;
+        uiStatus = status;
+    }
     ImGui::TextUnformatted("音频");
-    ImGui::BeginDisabled(!installed);
-    if (ImGui::Checkbox("伴奏模式 / 关闭人声", &enabled))
+    ImGui::BeginDisabled(!uiInstalled);
+    if (ImGui::Checkbox("伴奏模式 / 关闭人声", &uiEnabled)) {
+        std::lock_guard<std::mutex> lock(mutex);
+        enabled = uiEnabled;
         pending = true;
+    }
     ImGui::EndDisabled();
-    ImGui::TextUnformatted(status.c_str());
-    ImGui::TextUnformatted(songMusic ? (enabled ? "当前歌曲：人声静音已请求" : "当前歌曲：使用游戏原始增益") : "当前没有绑定歌曲");
+    // 只在当前已绑定的例外音源显示提示；窄面板自动换行，不增加常驻名单或弹窗。
+    if (uiHasSong && uiKnownUnsupported) {
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f),
+            "此曲无独立人声轨，伴奏模式无法去除歌声。");
+        ImGui::PopTextWrapPos();
+    }
+    ImGui::TextUnformatted(uiStatus.c_str());
+    if (!uiHasSong || !uiKnownUnsupported)
+        ImGui::TextUnformatted(uiHasSong ? (uiEnabled ? "当前歌曲：人声静音已请求" : "当前歌曲：使用游戏原始增益") : "当前没有绑定歌曲");
     ImGui::TextWrapped("适用于标准分轨音频。已混入伴奏的人声无法去除；部分 Mod 曲可能没有人声分轨。");
-    if (ImGui::Button("保存音频设置"))
-        status = SaveSettings() ? "音频设置已保存" : "音频设置保存失败";
+    if (ImGui::Button("保存音频设置")) {
+        // 磁盘写入在锁外完成，避免音频请求等待面板绘制或配置文件 I/O。
+        const bool saved = SaveSettings();
+        std::lock_guard<std::mutex> lock(mutex);
+        status = saved ? "音频设置已保存" : "音频设置保存失败";
+    }
 }

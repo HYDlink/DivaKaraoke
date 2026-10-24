@@ -30,6 +30,8 @@ private:
     bool installed = false;
     bool pending = false;
     bool applied = false;
+    // 当前加载音源是否属于用户确认的例外，仅用于面板提示。
+    bool knownUnsupportedAudio = false;
     std::string status;
 };
 

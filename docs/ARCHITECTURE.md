@@ -115,7 +115,7 @@ KTV 层应在不改变逆向边界的前提下，为当前句、下一句、预�
 
 现有歌词运行时保持 SRT → LyricLine → KTV 渲染，歌词功能已由用户验收。新增 scripts/export_lyrics.py 是离线短入口：优先复用已验证来源树，按实际 DML priority/enabled/include 选择来源，整批校验后发布 cache，显式安装通过哈希保护用户 SRT/Ruby。
 
-NonVocalManager 是延迟创建的独立模块，在游戏歌曲声道对增益函数增加可选 Hook，仅控制当前歌曲对象的人声 pair1/3。歌曲路径在原 LoadSongAudio 消费字符串前复制，成功加载后绑定；离开 PV 的恢复与指针清理在原状态切换之前执行。配置在 audio-tools.toml。
+NonVocalManager 是延迟创建的独立模块，在游戏歌曲声道对增益函数增加可选 Hook，仅控制当前歌曲对象的人声 pair1/3。歌曲路径在原 LoadSongAudio 消费字符串前复制，成功加载后绑定；离开 PV 的恢复与指针清理在原状态切换之前执行。配置在 audio-tools.toml。已确认例外仅在歌曲加载时按实际音频文件名匹配，状态随绑定/离开PV清理；只控制伴奏开关下的条件式提示，不介入声道增益或OBS请求。正式支持名单入口为NON_VOCAL_SUPPORT.md。
 
 ObsManager 复用既有状态/时钟，经有界后台 Named Pipe 发送会话快照到独立 Python Helper；Helper 用 WebSocket 5 控制本机 OBS。游戏帧线程不运行网络，生命周期与 IPC 状态独立加锁。录制所有权只在成功 StartRecord 响应后认领；配置开关在 obs-tools.toml，密码在 Helper 本机私有 JSON。自然结束事件和视频首尾仍待用户游戏验收。
 
@@ -142,3 +142,28 @@ ObsPvSession 只观察既有状态、歌曲加载、PVID 和播放时钟，识�
 ## 播放列表歌词生命周期（2026-10-11）
 
 LyricManager 在每次 PV POST PROCESS TASK 重建本次 SRT/Ruby，独立于上次是否经 PVsel 结束；loadedPvid 将时间线绑定到本曲。PV_STAGE/PV_WATCH/选曲/菜单清理时间线，PVID 不匹配时渲染入口立即拒绝显示、OnFrame 清除旧数据。相同 PVID 的下一次准备也重建时间线，暂停只改变播放状态。此修复使用现有通知，不新增 Hook；OBS 的逐首会话保持独立。
+## 逐行歌手配色与合唱渐变MVP
+
+已有有效PV缓存JSON所记来源 → 生产DSC读取器可选命令观察回调 → 按身份解析角色表及复制槽 → 口型活动阈值/成功失败分支一致性 → PVnnn.singers.tsv及独立审计。运行时继续SRT/Ruby原路径，旁路只添加LyricLine.singers；PVID/完整行数/每行时间及全文有任何不匹配即拒绝整份，缺失或未知回退默认色。不同身份不绑定固定槽位；同身份复制演出角色去重。
+
+SingerPalette含未唱/已唱填充、描边、阴影，按身份保存到独立singer-colors.toml，不覆盖既有freelyrics设置。Lyric面板展示当前歌手及其后的可扩展配置。KtvTextStyle携带每层色彩端点，AddStyledKtvText只修改本次新增顶点颜色；正文及Ruby共享整行横坐标，原ワイプ分区和DX11整体透明合成保持。多人可在横向柔和渐变与全部参与者平均纯色之间切换，不重建字体、不增加shader或Hook。
+
+口型标记是参与推测，不是音频声部真值；剧情无声口型可误判，未实现假名/罗马音对齐、主唱/和声判定或逐字时间。规格、工具及验收边界见 [歌手配色MVP](SINGER_COLORS_MVP.md)。
+
+
+## 合唱上下窄过渡试用（2026-10-14）
+
+singer_render.h为生产正文/注音与渲染回归共享入口；上下模式按本次文本真实字形高度，通过既有ImGui精细裁剪生成不重叠色带并插值UV，中间20%用四段近似柔和过渡。每层独立配色，等色端点走原路径；横向填唱GPU裁剪、整体透明合成、字体图集与逆向集成都不变。独立配置新增chorus_vertical，缺少时默认试用上下；可以恢复原横向渐变，关闭渐变仍为融合纯色。三方案设计记录见CHORUS_COLOR_DESIGNS.md，方案二未实现，须先避让预热省略号。
+
+## 自动多身份扫描与人工修订层（2026-10-15）
+
+export_lyrics在最终有效来源合并后生成Ruby，再扫描全部缓存的角色表。按身份去重复制槽，多个已知不同身份才调用既有口型算法；不明确资料逐曲记录。manifest版本3统一跟踪SRT/Ruby和歌手三件套及哈希，安装器保护用户修改，按已有安装清单及旧MVP明确哈希迁移所有权并回收过期生成旁路。
+
+manual-singers位于cache快照之外，模板初始auto，人工覆盖独立保存。最终歌手为自动结果加显式人工修订，修订严格绑定全文、时间、编号及总行数；审计保留原自动结果和修订哈希。默认完整导出、Ruby补齐与仅歌手补齐共用此流程，apply_singer_marks.cmd供日常快速应用。运行时仍只读SRT/Ruby/最终singers.tsv，DLL不解析人工模板，也不读游戏资产。
+
+## 性能路径更新（2026-10-16，替代历史原生采集描述）
+
+当前KTV只读整首SRT/Ruby/歌手缓存，不再安装CopyCharsByCount和PVDBLookup，也不采集原生当前句或逐句更新字符集。原版歌词显示Hook仅按showInternalLyrics直接转发。轨道与行几何缓存随时间线、预告、字体版本、输出尺寸及布局装饰失效；Ruby直接UTF-8绘制，合成资源在安全渲染入口预热。OBS仅变化发布，音频UI/保存文件不持音量锁。可选ETW由Init注册，只有WPR启用提供程序时才记录区间和换句；普通运行无计时/写盘。诊断DLL仍为优化Release并提供匹配PDB。细节见PERFORMANCE_INVESTIGATION.md。
+## OBS 单曲自然结束状态（2026-10-18）
+
+ObsPvSession::IsEndState统一识别GameResultTask及既有加载/退出状态，结果状态清除prepared/active，保留epoch直到下一次准备。既有ChangeGameState Hook按此分类在原游戏函数前发布结束快照、之后发布准备快照；不新增地址或Hook。ObsManager快照变化通过guard配套条件变量唤醒后台，未变化每秒心跳；网络、封装等待与诊断落盘继续只在后台，游戏线程不等待响应。中途暂停与自然结束按状态区分，不根据停钟或isPlaying单独推断。

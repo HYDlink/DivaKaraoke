@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WindowsPerformanceRecorder Version="1.0" Author="DivaKaraOkeLyrics">
+  <Profiles>
+    <EventCollector Id="DivaModEvents" Name="Diva Mod performance events">
+      <BufferSize Value="64" /><Buffers Value="64" />
+    </EventCollector>
+    <EventProvider Id="DivaModProvider" Name="8ce8f03d-d445-4c7e-90e9-131aff5d1b34" Level="5" />
+    <Profile Id="DivaMod.Verbose.File" Name="DivaMod" Description="Mod sections and lyric change markers" LoggingMode="File" DetailLevel="Verbose">
+      <Collectors><EventCollectorId Value="DivaModEvents"><EventProviders><EventProviderId Value="DivaModProvider" /></EventProviders></EventCollectorId></Collectors>
+    </Profile>
+  </Profiles>
+</WindowsPerformanceRecorder>

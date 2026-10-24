@@ -11,8 +11,17 @@ struct ObsPvSession {
     float previousTime = -1.0f;
     unsigned long long epoch = 0;
 
+    // 自然结束进入结果画面，中途暂停不是结束，不能仅按 isPlaying 判断。
+    static bool IsEndState(const char* state) {
+        return state && (std::strcmp(state, "GameResultTask") == 0 ||
+            std::strcmp(state, "PVsel") == 0 || std::strcmp(state, "PV_WATCH") == 0 ||
+            std::strcmp(state, "PV_STAGE") == 0 || std::strcmp(state, "MAINMENU_SWITCH") == 0 ||
+            std::strcmp(state, "MENU") == 0 || std::strcmp(state, "STARTUP") == 0);
+    }
+
     // 已有准备事件每次建立新会话，加载/菜单状态只结束旧会话。
     void OnState(const char* state, int selectedPvid) {
+        if (!state) return;
         if (std::strcmp(state, "PV POST PROCESS TASK") == 0) {
             prepared = true;
             active = false;
@@ -21,9 +30,7 @@ struct ObsPvSession {
             pvid = selectedPvid;
             ++epoch;
         }
-        else if (std::strcmp(state, "PVsel") == 0 || std::strcmp(state, "PV_WATCH") == 0 ||
-            std::strcmp(state, "PV_STAGE") == 0 || std::strcmp(state, "MAINMENU_SWITCH") == 0 ||
-            std::strcmp(state, "MENU") == 0 || std::strcmp(state, "STARTUP") == 0) {
+        else if (IsEndState(state)) {
             prepared = active = waitingForReset = false;
             previousTime = -1.0f;
         }

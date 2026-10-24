@@ -88,21 +88,15 @@ public:
     // 释放临时资源；不持有游戏纹理或游戏生命周期对象。
     ~KtvCompositeLayer() { ReleaseResources(); }
 
-    // 切换到与当前 ImGui 视口一致的透明画布，文字层继续以正常颜色绘制。
-    bool Begin(ID3D11Device* newDevice, ID3D11DeviceContext* context) {
-        if (!newDevice || !context || active) return false;
+    // 在进入绘制前预热着色器和分辨率资源，避免首句淡入时同步编译或分配整屏纹理。
+    bool Prepare(ID3D11Device* newDevice, UINT newWidth, UINT newHeight) {
+        if (!newDevice || !newWidth || !newHeight || active) return false;
         if (device != newDevice || !blend) {
             ReleaseResources();
             device = newDevice;
             device->AddRef();
             if (!CreateShaders()) { ReleaseResources(); return false; }
         }
-        D3D11_VIEWPORT viewport = {};
-        UINT count = 1;
-        context->RSGetViewports(&count, &viewport);
-        const UINT newWidth = (UINT)(viewport.TopLeftX + viewport.Width);
-        const UINT newHeight = (UINT)(viewport.TopLeftY + viewport.Height);
-        if (!count || !newWidth || !newHeight) return false;
         if (!texture || newWidth != width || newHeight != height) {
             ReleaseTexture();
             D3D11_TEXTURE2D_DESC description = {};
@@ -120,6 +114,17 @@ public:
             width = newWidth;
             height = newHeight;
         }
+        return true;
+    }
+
+    // 切换到与当前 ImGui 视口一致的透明画布，文字层继续以正常颜色绘制。
+    bool Begin(ID3D11Device* newDevice, ID3D11DeviceContext* context) {
+        if (!newDevice || !context || active) return false;
+        D3D11_VIEWPORT viewport = {};
+        UINT count = 1;
+        context->RSGetViewports(&count, &viewport);
+        if (!count || !Prepare(newDevice, (UINT)(viewport.TopLeftX + viewport.Width),
+            (UINT)(viewport.TopLeftY + viewport.Height))) return false;
         context->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, savedTargets, &savedDepth);
         context->OMSetRenderTargets(1, &target, nullptr);
         const float transparent[4] = {};

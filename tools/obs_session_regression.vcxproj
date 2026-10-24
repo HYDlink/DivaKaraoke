@@ -8,7 +8,14 @@
   <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><PlatformToolset>v142</PlatformToolset></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup><OutDir>$(MSBuildThisFileDirectory)..\artifacts\obs-playlist-build\</OutDir><IntDir>$(OutDir)session-obj\</IntDir></PropertyGroup>
-  <ItemDefinitionGroup><ClCompile><LanguageStandard>stdcpp17</LanguageStandard><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions></ClCompile></ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="obs_session_regression.cpp" /></ItemGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><AdditionalIncludeDirectories>$(ProjectDir)..\Source;$(ProjectDir)..\Dependencies;$(ProjectDir)..\Dependencies\toml11;$(ProjectDir)..\Dependencies\imgui;$(ProjectDir)..\Dependencies\imgui\backends;$(ProjectDir)..\Dependencies\detours\include</AdditionalIncludeDirectories><LanguageStandard>stdcpp17</LanguageStandard><AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions><FunctionLevelLinking>true</FunctionLevelLinking><Optimization>MaxSpeed</Optimization><RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary><ExceptionHandling>Sync</ExceptionHandling></ClCompile>
+    <Link><OptimizeReferences>true</OptimizeReferences></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="obs_session_regression.cpp" /><ClCompile Include="replay_obs_manager.cpp" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\Dependencies\imgui\imgui.cpp" /><ClCompile Include="..\Dependencies\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\Dependencies\imgui\imgui_widgets.cpp" /><ClCompile Include="..\Dependencies\imgui\imgui_tables.cpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

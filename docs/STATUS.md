@@ -1,5 +1,158 @@
 # 当前状态
 
+## 第二阶段里程碑冻结，随后进入第三版（2026-10-25）
+
+用户确认当前通过角色口型事件推测行级歌手归属、分歌手配色的成果为第二阶段完成里程碑，要求先归档和Git状态提交，含DLL/Mod/资源，再开始第三版全部逐字计划。本次冻结源码、已安装DLL/PDB和用户配置/歌词/字体/歌手资料；DLL与最近已验证构建同为9FD8A1F547259A7A1A59D96BB2591FE8ED08927395A438C0A05A94DEFB8F05CB。归档细节见RELEASE_V2.md，正式校验凭据为对应目录snapshot.json和release-v2.json。历史注音缺标、口型推测边界与OBS实机待办保留。归档完成前不修改第三版生产实现。
+
+## 逐字歌词离线流水线与双层时间方案（2026-10-25）
+
+用户明确以现有完善SRT为基础自动做歌词—口型对齐，要求制作步骤、离线脚本、字级渐变和明确时间精度，同时保留行级歌手/显示职责。已核对生产导出器、SRT/Ruby/歌手加载及裁剪代码，形成[实施方案](CHARACTER_TIMING_PLAN.md)：SRT继续行级主数据，新timing.tsv承载字/可信词组与Ruby发音段，audit.json保留证据；不把逐字拆成SRT cue，不依赖LLM逐句填时间。
+
+方案固定导出/加载整数毫秒，保留DSC原始0.01ms事件；实际边界精度未知，P50≤50ms/P95≤100ms为待测研发目标，另报告覆盖/拒绝及开始结束误差。按C0合同、C1 PV045自动候选、C2真实边界、C3离线视觉、C4加载回归、C5导出安装、C6统一部署、C7来源扩展推进。已记录额外口型/促音/拖腔、终点、编号族、分支/多槽、UTF-16及现有读音缺口的处理边界；未来需要时离线音频补证，当前未选型或实现。**方案完成；生产逐字生成/加载/渲染NOT IMPLEMENTED，实际误差NOT VERIFIED。** 本轮只更新方案与交接，不改代码、歌词或游戏目录。
+
+## 整句缺注音的安装态排查（2026-10-25）
+
+用户PV812截图约37.74秒、第11句「ticktack ticktack 結んで開いて」没有Ruby。实际安装审计仍为整句来源对齐v2，来源是「TICK TOCK TICK TOCK musunde hiraite」，状态unmatched、spans为空，TSV有效行11也为空；不是仅凭截图推定渲染丢失。正文英文ticktack与来源ticktock存在拼写差异，当前Latin单元要求精确匹配，搜索在首单元失败（states=1），全句失败策略将后面的日文汉字也一并撤掉。第9句「ticktack ticktack 円を描いて」同类。词典已有むす/ひら参考，来源也有日文唱法，不是简单的“词典查不到”。
+
+按当前已安装export-install-manifest逐曲只读统计：309首、9220个含汉字有效行，其中765行整句零注音，涉及174首；763行为unmatched，2行为ambiguous；另3行有局部未覆盖汉字。该统计不同于历史779个含汉字待复核行，后者也包含来源缺失的词典推测等。来源/规则失败不能等同于来源资料全部错误。证据artifacts/furigana-missing-review-20261025/installed-missing.json。
+
+根因是前次安全策略的拒绝粒度过大，真实转写差异和不支持外来词也会导致整句缺标。后续应补有证据的英文/转写等价规则，并设计有可靠边界时的局部对齐，保留已确认汉字、仅隔离无法确定区段；禁止回到整句词典盲猜或任意跳过来源。本轮只读取现有缓存/代码并更新诊断文档，未改生成算法、SRT、Ruby、DLL或游戏目录，未执行新全量生成或部署。**ANALYSIS VERIFIED；覆盖修复NOT IMPLEMENTED。**
+
+## PV045《Dear》口型到逐字时间可行性（2026-10-25）
+
+按用户指定单曲只读复用官方资料，复用生产DSC观察回调完整读取2071条命令、524条口型；全部槽0/分支0，四难度口型时间/参数/分支完全一致。官方24句中17句在O/U归并后元音类别完整同序；前四句归纳候选表，其余20句13句同序，不当作音频准确率。首句17个口型可结合官方读音和既有正文映射关联到「あ・た・ま・の……」，頭对应三个读音。七句保留促音附近多事件、缺事件、姿态差异及末句A重复，不强补切点。
+
+已确认当前生产渲染是整句时间线性推进全行裁剪边界；逐字变速可复用字体/裁剪，Ruby需独立读音进度。主要未解问题是动画命令与真实发声起止的偏差、长音/停顿终点、连续同元音与跨字读音；本曲23/24句首口型晚LYRIC100ms，另1句140ms，不能未经音频核对统一平移。新增scripts/research_pv045_mouth.py及单曲证据/首句候选，详见[可行性报告](research/pv045-character-timing-feasibility.md)。资料、四难度、正文读音关联与研究校验为ANALYSIS VERIFIED；真实发声时间NOT VERIFIED，逐字渲染NOT IMPLEMENTED。本轮未改生产C++、正式歌词、DLL或游戏目录。
+
+## 单曲 PV 自然结束录制修复（2026-10-18）
+
+DEPLOYMENT VERIFIED：用户退出游戏后已备份并直接安装DLL、匹配PDB及两份验收文档，4份文件SHA-256独立复核一致，5份配置保持原哈希。备份artifacts/deployment-backups/obs-single-end-20261018-011630；记录artifacts/obs-single-end/deployment.json；交付包DivaObsSingleEnd.zip。实际游戏单曲收尾与成片仍待用户验收。
+
+用户反馈单曲播完停留结束画面时OBS仍录制，只能用单曲播放列表绕过。现场PV805日志确认：GameResultTask时钟冻结218.339秒、isPlaying仍为1，旧会话准备/录制均为1，直到PVsel才结束。当前最小修复直接识别已有GameResultTask，不需要播放列表或猜测终点。
+
+ObsPvSession将GameResultTask纳入结束状态，清除active/prepared，冻结或残留递增时钟均不会重新启动。中途PAUSE_MENU_SWITCH继续录制，重播仍建立新epoch。既有ChangeGameState Hook仅将OBS结束通知提前到原函数前，准备通知仍在原函数后读取标题；未增加签名/Hook。后台用条件变量在快照变化时唤醒，保留每秒心跳，游戏线程不等待OBS。
+
+生产ObsManager现场序列回放、结尾600帧/错误播放标记/重播/下一首、既有会话与所有协议字段、13项Helper模拟、歌词/歌手/缓存回归、Release/x64及DLL独立装载通过。DLL与匹配PDB位于artifacts/obs-single-end/build；DLL SHA-256：9FD8A1F547259A7A1A59D96BB2591FE8ED08927395A438C0A05A94DEFB8F05CB。BUILD / LOGIC VERIFIED；实际单曲收尾与成片尾帧仍为IN-GAME VERIFICATION REQUIRED。下一步普通单曲播到结束，不退出画面，确认OBS自动StopRecord保存；再验收人工暂停恢复与同曲重播。
+
+OBS独立开发/验收文档已更新。此次按结果状态结束，未实现此前PV_END提前200毫秒预测；异步OBS响应仍可能保留少量结束画面，不声称帧精确截断。现有歌词视觉、音频控制、自动命名和Helper协议保持。
+## PV730《Hello, Worker》履历随角色变化的只读核对（2026-10-16）
+
+用户截图显示初音出镜，履历姓名为「初音ミク」且照片为初音。复用现有原版提取树，确认地区pv_db的pv_730默认performer为LUK、音源为rom/sound/song/pv_730.ogg、chreff默认引用EFFCHRPV730_LUK_001/002。main-farc-extract-v2/rom/auth_3d内已有MIK/LUK/RIN/LEN/KAI/MEI/HAK/NER/SAK/TET十种角色的001演出包；实际读取初音/巡音001的a3da，分别引用EFFCHRPV730MIK001_RIREKI__DIVSKN与EFFCHRPV730LUK001_RIREKI__DIVSKN，证实预制了角色专用履历对象演出资源。截图与资源支持履历随出镜角色匹配，不能据此推断实际音频换唱。
+
+状态：资源存在及初音/巡音对象引用 **ANALYSIS VERIFIED**；未导出贴图逐像素对照，未追踪本机运行时具体选择函数，未验证每套服装的照片行为。仅只读核对与说明，无解包、代码变更或游戏目录写入。
+
+## 伴奏例外正式名单与按曲提示已部署（2026-10-16）
+
+用户完成实机测试并明确确认此前309首歌词曲库中的10首伴奏例外。正式入口新增docs/NON_VOCAL_SUPPORT.md，完整列出PVID/曲名/原因，区分用户已确认名单和其他结构扫描候选，并从README、NON_VOCAL_MVP及三功能验收说明直接链接；不再要求从artifacts查日常支持名单。
+
+用户选择“播放到例外曲目时，在伴奏开关下显示一行提示”。NonVocalManager只在成功加载时按实际音频文件名匹配10个已确认默认音源，绑定/切歌/返回菜单时更新或清理，仅在PV工具面板伴奏开关下显示黄色“此曲无独立人声轨，伴奏模式无法去除歌声。”；普通音源无新增提示，不增加常驻列表或弹窗。不改音量控制、开关、OBS或Hook；换唱文件不凭PVID误标，已有性能修复的锁外UI逻辑保留。
+
+Release/x64及独立DLL加载通过；28项文件名/路径/大小写/正常曲与换唱边界检查通过，正式名单与已审计10个默认文件一致，提示字形已有UI字符集覆盖。用户关闭窗口后残留PID21644未退出，首次部署未写文件；随后按用户明确授权仅结束该无窗口残留，再备份并直接部署DLL/PDB及三份文档，5份文件SHA-256独立复核一致，全部现有配置保持哈希。DLL：59D350AD217F9A29F45495481D19D6DEE0CB79DD508F3DDFD6FCAC0582623D0A。备份artifacts/deployment-backups/non-vocal-support-20261016-013433，记录artifacts/non-vocal-support/deployment.json，验证validation.json，包DivaNonVocalSupport.zip。**十首音频例外 IN-GAME VERIFIED（用户确认）；新提示 BUILD / LOGIC / DEPLOYMENT VERIFIED，实际显示仍待下次游戏确认。**
+
+## 换句卡顿修复已获160 FPS实机确认（2026-10-16）
+
+用户明确目标为开启歌词和录制时流畅，PV261可复现；关闭Show Lyrics仍卡，禁用整个Mod并重启后不再卡。静态审查确认旧原生捕获不受显示开关控制，每新句至少九次同步WriteConsoleW，且可能触发字体重建；这些数据已不参与正式KTV。已删除对应CopyChars/PVDB旧Hook和原生采集路径，整首SRT/Ruby字形预热保留。增加轨道/几何缓存及完整失效条件、Ruby UTF-8栈缓冲、OBS协议变化去重、音频面板锁外绘制/文件写入，并提前准备透明合成shader/纹理，保留原视觉算法。
+
+Release/x64、独立DLL装载、播放列表/缓存失效、OBS全部协议字段与会话、真实DX11渐变/透明合成通过；首轮8张1080p/4K生产画面逐字节一致。新增真实PV261硬件DX11回放及ETW按需诊断，提供匹配Release PDB。Subagent二次只读复审未发现新增可复现正确性问题。离屏回放不含游戏负载/Present/控制台阻塞/OBS编码，不能替代实际卡顿调用栈。
+
+用户催促先直接使用，已备份并部署7份文件且独立复核SHA-256；仅将Mod config.toml重新启用，freelyrics/歌手配色/音频/OBS配置哈希保持。DLL及符号见artifacts/performance-investigation/fixed-build，记录deployment.json，备份artifacts/deployment-backups/performance-fix-20261016-011259。BUILD / LOGIC / DEPLOYMENT VERIFIED。部署后用户明确反馈“明显好转，没有卡顿，开160Fps都没问题”，当前复测场景的游戏换句流畅度记为IN-GAME VERIFIED（用户确认）。此结论不扩大为全曲、所有输出分辨率或录像成片验收；录像是否仍有掉帧尚无单独反馈。
+
+系统WPR19041普通权限报0xc5585011，管理员开始成功但保存报0x80010106，两次工具自检无有效ETL。微软签名PerfView已下载；新版WPT只选性能组件安装已成功，安装器退出码0；新版ETL保存尚未复测。没有PV261现场ETL或真实游戏火焰图，不能声称已经函数级定因。用户已确认160 FPS无卡顿，当前不再主动继续采集；诊断工具保留，只有后续复发或用户要求时再使用。详见PERFORMANCE_INVESTIGATION.md。
+
+## 全曲库伴奏结构边界审计（2026-10-16）
+
+按当前DML启用/优先级/include及11份PV数据库，审计329个默认PVID、45个显式换唱版本，共374条引用，去重349份原始音频全部按原采样率完整解码，定位/解码零失败；所有默认PVID均有可定位谱面引用，配置/数据库指纹在扫描期间一致。按PVID统计，不将共享音源或换唱当作不同歌曲数量；未逐项确认选曲界面显示。
+
+默认20条结构性受限：7条目标人声组全零、13条双声道，物理去重19份；其中原309首歌词曲库有10条（6条空人声组、4条双声道）。45条换唱中22条受限（5条空人声组、17条双声道）；默认与换唱42条合计物理去重38份。其余309条默认/23条换唱仅为两组均有信号的候选，不能认定伴奏无和声、采样人声或未分离歌声。本次无整首无信号、保留组全空或同比例重复混音条目。
+
+复用扩展`scripts/audit_non_vocal_audio.py`，新增`scripts/audit_installed_non_vocal.py`，保留来源指纹、默认/换唱区分、角色名称、整首声道统计与中文清单。报告`artifacts/non-vocal-library-audit/`；PV261/PV424与此前完整统计及源哈希相同，374条映射、汇总、脚本语法和UTF-8通过核验。漏按断人声可作游戏原声对照，但须关闭模组伴奏并以正常曲正对照；“没变化”单独不能证明无分轨，“主唱消失且伴奏保留”则说明同一音源有可独立控制信号。完整名单、其他边界及具体方法见[全曲库伴奏覆盖说明](research/non-vocal-library-coverage.md)。**音频结构 ANALYSIS VERIFIED；未执行游戏内听审、改Hook或部署DLL。**
+
+## PV261《君の体温》伴奏模式残留人声原因已确认（2026-10-16）
+
+用户截图中的伴奏开关已勾选，现有PV261日志也报告静音请求已应用。继续完整解码已有官方音频`F:/DivaKaraOkeLyrics/main-extract/rom_steam/rom/sound/song/pv_261.ogg`，确认Vorbis/44100 Hz/4声道/245.5秒：后两个声道（零基索引2/3，对应pair 1）各10826550个采样全部为零；前两个声道（pair 0）为唯一有效立体声。源文件SHA-256为9DB28999B9E0BC2DCAEA7823DA52A1B1CB74BAD44E7C19E4BC51E4A7955E545E。截图路径与此资源一致，Mod目录未发现同名OGG或CPK覆盖。
+
+当前静音pair 1/3的逻辑对该四声道文件实际关闭的是空白pair 1，pair 3无对应源声道；结合用户仍能听到初音的实际反馈，人声与伴奏均已混入pair 0，无法通过当前声道增益独立关闭。静音pair 0会连伴奏一起关闭。四声道格式本身不能当作拥有独立伴奏/人声的证据，界面的“静音已请求”和录像后缀也不能当作听感证明。
+
+新增只读脚本`scripts/audit_non_vocal_audio.py`以原采样率流式解码整首、记录逐声道非零计数/峰值/RMS及源文件哈希。对照PV424的168秒四声道音频，两组声道均有有效信号，排除审计流程将第二组声道统一丢弃的情况。报告`artifacts/pv261-audio-audit/channel-audit.json`，说明见[PV261音频证据](research/pv261-non-vocal-audio-evidence.md)。**音频源结构 ANALYSIS VERIFIED；此曲当前伴奏模式无法独立去人声，未修复或部署DLL。** 若需要纯伴奏，应另行使用可用的纯伴奏音源或离线音源分离；本轮检查不包含音源替换/分离。
+
+## 稀疏口型导致默认色的修复（2026-10-16）
+
+用户截图定位PV212第29句「させない　カラフル×セクシィ」与PV041实际F2nd覆盖版第29句「楽しかったって」。安装文件与自动结果一致、没有人工强制默认；根因是固定6次活动门槛：前者两槽各5次有效活动，后者初音4次，均被漏标。PV212另两处1363毫秒短句各槽3–4次，同样被拦截。
+
+通用工具改为mouth-activity-v2，仅对原本所有分支均未知的行增加持续/双槽同步活动补判，不按PV硬编码、不扩展姿态、不继承邻句。PV212三处均恢复LUK+MEI，29/29行有标记；PV041该句恢复MIK，30/30行有标记。两曲四难度标签/歌词事件一致。普通主唱旁少量动作过滤、单次剧情动作拒绝、分支冲突、愛Dee39–42句组合与六初音归并重新运行当前分类器均通过；erase or zero第10句缺口型仍为未知。
+
+全量重算309首、62首候选，68处原未知行获补判，涉及21首；原已识别身份均保持。新统计1213单人/693多人/604未知，不代表新增行已逐曲听审。62首生产C++加载绑定及导出器人工修订/安装保护回归通过；309首SRT、Ruby、既有人工模板、DLL与配色配置哈希保持。证据与逐行变化见artifacts/singer-threshold-fix/validation.json。LOGIC / DEPLOYMENT VERIFIED；已备份至artifacts/deployment-backups/singer-export-20261016-002023并直接更新工具、缓存和62首歌手标记，1113份运行时文件全部哈希一致。两首已安装旁路分别30/30、29/29行有身份，DLL、人工模板与配色保持原哈希。游戏当前运行，本次仅更新数据；重新进入PV加载，视觉仍待用户验收。另为部署PS1补充UTF-8 BOM，兼容Windows PowerShell中文文件识别。
+
+## 跨项目游戏资产索引整理（2026-10-15）
+
+用户准备在新项目预研其他Mod，明确与歌词几乎无关。新增docs/EXTRACTED_ASSETS_INDEX.md，核对基础包/DLC既有解包根、基础包/F2nd/Misaki-Max FARC展开根及历史报告（分别7659/528/77成功，报告均0失败）、实际a3da/bin样例和已有工具/DSC通用读取入口；区分已提取、结构解析与语义验证，未逐文件重新审计整树。EXTRACTED_ASSET_REUSE.md增加入口链接。只整理文档，不开新项目、不解包、不搬迁或写入游戏。
+
+## 自动多歌手全量导出与人工修订已部署（2026-10-15）
+
+用户明确授权：不再按Agent挑选的PV名单生成，自动扫描全部有效多身份PV并集成歌词导出；同时方便用户今后自行标注erase or zero。export_lyrics.py默认在最终来源合并与Ruby之后调用通用角色扫描/口型生成器，新增rebuild-singers-only短路；独立工具新增cache-dir批量入口，旧单曲接口仍可用。入口没有曲名/PV白名单。角色表按输入路径、mtime和size缓存，复制身份归并，GUEST不直接过滤。
+
+实际9来源309首全部成功，工具自动生成62首多身份候选（2510行：1175单人、663多人、672未知），239首同身份跳过；8首因未解释的复制类型/身份不足保持不明确。另1首两个已知身份但存在未知槽，仍生成已知身份推测并记录槽位。此为候选与数据覆盖统计，不等同真实音频歌手准确率。角色/口型规则未改变，原上下试用配色与DLL保持原版本。
+
+新增独立manual-singers/PVnnn.singers.manual.tsv模板，用户只改第四列auto、单人身份、逗号组合或-；已存在模板不覆盖。人工行严格绑定PVID、总行数、行号、时间和全文，错行拒绝整次发布；审计保留auto_singers/auto_reason与人工文件哈希。当前所有正式模板仍为auto，没有替用户写人工声部。apply_singer_marks.cmd可在真实安装位置一键重新应用并安装。
+
+默认完整导出和仅歌手补齐均已执行；62首全部通过生产C++ SRT加载与绑定，独立全量SHA-256/时间/全文及人工覆盖/冲突保护/所有权回收回归通过。309首JSON时间线完全一致，Ruby逐字节一致；23份SRT仅补齐末尾空cue分隔换行。真实CMD入口在安装目录执行成功，1113份运行时文件与已安装缓存全部独立复核；三个CMD为UTF-8无BOM/CRLF。已备份并直接安装工具、62首三件套、309首可复用派生缓存及62份独立人工模板，回收旧同身份样本PV268的生成旁路；用户配置、字体、OBS与DLL保留。DLL仍FD686BCAD8CCACD3FF1C0F6B10A8241F799EAD50B4993BC8CA6F40DD67FE858E。
+
+备份D:\Work\Projects\VibeCoding\DivaKaraOkeLyrics\artifacts\deployment-backups\singer-export-20261015-202948；记录artifacts/singer-full-export/deployment.json及validation.json；包DivaSingerExport.zip。当前LOGIC / DEPLOYMENT / CMD VERIFIED，真实声部效果仍需用户体验。操作入口见docs/SINGER_EXPORT_WORKFLOW.md；安装人工目录为mods/MMFreeLyrics/artifacts/exported-lyrics/manual-singers。
+
+## 合唱上下双色试用已部署（2026-10-14）
+
+用户认可方案一的功能性，但明确视觉只是勉强、仍很可能以后改方案二；三个方案和图片已保存于docs/CHORUS_COLOR_DESIGNS.md。方案二原位置与预热省略号冲突，当前不实现也不移动省略号。方案一作为可回退试用默认，面板「上下双色」取消即回方案三整句横向渐变；独立chorus_vertical保存方向，旧配置缺键采用上下试用，四色与阴影保留。
+
+共享singer_render.h使用既有ImGui精细裁剪生成字形上下色带，中间20%四段近似柔和过渡，正文与每段注音分别按真实高度取色。等色端点走原纯色路径；横向填唱、整体透明合成、字体图集、歌词与口型标签不变，无新shader或Hook。
+
+两人/三人、完整四色及阴影、18/94/188字号、正文/注音的覆盖面积/UV/颜色、86400顶点跨16位索引偏移、原两字体/4K几何、DX11透明合成与方向持久化检查通过；最大透明合成误差1/255。Release/x64及DLL独立装载通过。用户退出游戏后已备份并直接部署15份文件，独立再次复核哈希一致。DLL SHA-256：FD686BCAD8CCACD3FF1C0F6B10A8241F799EAD50B4993BC8CA6F40DD67FE858E；备份：D:\Work\Projects\VibeCoding\DivaKaraOkeLyrics\artifacts\deployment-backups\singer-mvp-20261014-011832；记录artifacts/singer-mvp/vertical-deployment.json，验证vertical-validation.json，包DivaSingerColors-MVP.zip。BUILD / LOGIC / DEPLOYMENT VERIFIED；上下视觉IN-GAME VERIFICATION REQUIRED。
+
+## erase or zero回忆演出漏标确认（2026-10-14）
+
+用户截图并确认第10句「踏み出せば、埋もれ　倒れても」实际由镜音连演唱，但这一段为回忆演出，没有对应的歌唱口型序列；用户接受这是口型方案的特殊边界。现有审计26.426–32.079秒只有LEN一次候选活动、KAI零次，跨度零，不满足阈值；下一句「ピュアな自由に」有LEN九次连续活动并正确标为LEN。安装旁路与工作区SHA-256一致，第10句明确为未知，故截图默认色来自证据不足，不是部署遗漏或渲染错色。
+
+本轮只记录用户声部真值与现有事件的差别，不降低阈值、不把邻句身份强行传播、不手改安装旁路。此类漏标与此前「无声却有口型」的误判是两种独立局限；没有口型不能推出没有歌声。若未来要求覆盖，需要另行取得音频或可信声部分工资料。当前算法及DLL保持原样。
+
+## 合唱句首辨识方案评审（2026-10-14）
+
+用户提供《カラフル×メロディ》三张实际游戏截图并认可MVP效果；可确认双歌手配色、颜色面板和整句横向合唱渐变已在游戏显示。此确认限于截图中的视觉效果，不扩大为六曲音频声部识别准确率验收。
+
+当前横向渐变的句首近似单人色，用户希望从开头辨识合唱。本轮提供可调填唱进度的上下双色窄过渡、句首双色标记及现有横向方案对比，并按用户要求导出三张方案图片；推荐双人先评估上下双色，三人以上可用句首组合标记避免细条纹。预览使用模拟背景与系统字体，不是已部署效果。浏览器736/320宽度、填唱进度与方案切换通过，仅设计评审，未更改或部署DLL。实际上下效果仍待用户选择与游戏验证；窄过渡实现需分割字形四边形并插值UV，单纯改顶点Y取色只能产生四边形内线性插值，不能直接复制预览中的窄过渡带。
+
+## 逐行歌手四色与合唱渐变MVP交付（本轮）
+
+按用户最新授权实现并直接部署。Promise确认为RIN+MIK（本机F2nd物理PV770覆盖）；erase or zero确认为LEN+KAI，第三槽是LEN复制，不新增身份；ACUTE支持KAI/MIK/LUK；Catch the Wave六个演出槽合并为MIK。通用 scripts/build_singer_timeline.py 从已有缓存来源自动生成 singers.tsv/audit/中文结果，不解包、不依赖Agent。生产DSC读取器仅增加可选已解码命令观察回调，保持原返回值。
+
+普通行默认6次活动、短行至多3次，并检查跨度、相对占比、成功/失败分支一致性；来源专用高频姿态保留推测说明。六首各难度标签一致；愛Dee恰好39–42句双人，与用户校对一致；erase or zero的62句中23单人/10多人/29默认，用户确认剧情MV有无声口型，不能把其标签称为已验证音频歌手。此数据用于误判对照，不进一步扩展字级对齐或音频识别。
+
+Lyric颜色面板新增按身份的歌手配置，当前第一、第二歌手默认展开，完整未唱/已唱填充及描边四类颜色另带两种阴影；独立 singer-colors.toml 原子保存，可支持任意身份数量与特定多人组合。合唱采用两端保留原色、中间30%柔和渐变，可切平均融合纯色；正文/Ruby共享整行顶点渐变坐标，保留字体UV、ワイプ裁剪和透明合成。旁路PVID/行数/时间/全文严格匹配，错行文件整体拒绝，缺失或未知沿用旧默认色；切歌不沿用旧身份。
+
+Python真实/隔离样本、生产SRT六曲绑定与播放列表、四色配置持久化、自定义第三身份、18/94/188字号字形/渐变UV/三人组合/原DX11透明合成、Release/x64和最终DLL独立装载通过。**BUILD VERIFIED / LOGIC VERIFIED / DEPLOYMENT VERIFIED；IN-GAME VERIFICATION REQUIRED。** 最终DLL SHA-256：01F2C9E562671C954B83BAA3E6178F0F402E2A9F341F69DC97192560A7554E21。
+
+游戏未运行时已备份并直接安装DLL、六首歌手旁路、三份工具和说明，共11份文件SHA-256核对一致；备份 artifacts/deployment-backups/singer-mvp-20261014-003456；记录 artifacts/singer-mvp/deployment.json，实验包 artifacts/singer-mvp/DivaSingerColors-MVP.zip。字幕/Ruby、字体、原配色、OBS及用户配置保留，无签名/Hook/结构偏移变更。快速体验按Ctrl+G，先Promise及已校对愛Dee，再以erase or zero观察误判。使用与复现见 [歌手配色MVP](SINGER_COLORS_MVP.md)。
+
+
+
+## 愛Dee（PV802）全自动歌姬配色口型研究（2026-10-13）
+
+用户希望完全自动化，指定愛Dee继续解析；不把人工修订当成必经步骤。本机曲名核实为PV802（PV809是愛の詩），读取已安装X Song Pack的现有脚本/文本与缓存，明确不是官方MM+原版证明。Normal完整4694命令、1165条口型（初音821/巡音344）、48句缓存重建一致，安装SRT哈希一致；四难度口型全序列一致、全局分支、无时间回退或隐式口型。
+
+工具参考元音映射来自已有Open-PD头文件，34/35保持未知。零裁边下21句只有初音元音、13句只有巡音元音、14句双槽，不是识别正确率。巡音说唱可见连续单槽；部分日文行巡音只有未知34或M动作，不能任意口型都判合唱。口型可早于对应字幕46ms至544ms，固定裁边敏感；142–157s日文加括号英文有两套不同步元音序列，支持不同词重叠候选，尚未听辨主唱/和声。无字幕空档及末句后仍有口型，不能判纯伴奏或伪造歌词。
+
+新脚本 scripts/research_pv802_mouth.py 复用现有读取器/观察器，不重写DSC parser；证据和48句统计在 artifacts/pv802-mouth-research/，详见 [愛Dee口型研究](research/pv802-mouth-singer-feasibility.md)。可继续探索自动单槽/双槽/不明确分类，以双人色或默认色处理混合行；不承诺每词唯一正确声部。**ANALYSIS VERIFIED；音频角色与准确率 NOT VERIFIED；自动配色 NOT IMPLEMENTED。** 未改Mod、已部署缓存、生产解析器、游戏文件或内存集成。
+
+
+
+## PV041 逐句歌姬配色口型调查（2026-10-13）
+
+按用户选择仅研究口型，复用已提取官方《カラフル×メロディ》PV041：Normal 3803条命令、869条带槽位口型（初音444/铃425）、30句非空歌词，口型全部全局分支；Easy/Hard/Extreme口型全序列与Normal一致。前四句仅初音槽、后四句仅铃槽，副歌有稳定相差10ms的同姿态双槽指令；同一句内也存在交替与后段同步，不能把两槽事件等同于整句共唱。基准姿态28尚未确认为通用闭嘴状态，未生成歌手标注或静音区间。
+
+发现已生成/已安装PV041歌词来自F2nd Song Pack的物理PV709覆盖脚本（883条口型），不是官方原版；现有30句重新关联一致，安装SRT与工作区SHA-256一致。覆盖表将铃标为GUEST却仍有大量口型，第3句比官方增加铃约1.1s的动作，原因未验证，不能凭type或任意事件判定声部。仅作本机来源差异核对，官方仍为主证据。
+
+新增 scripts/research_pv041_mouth.py，以临时行观察点记录现有解析函数已解码局部变量，不重写DSC parser；完整指令/偏移/哈希/分支及逐句统计保存在 artifacts/pv041-mouth-research/。样本与结论见 [PV041口型可行性研究](research/pv041-mouth-singer-feasibility.md)。**ANALYSIS VERIFIED；音频歌手身份 NOT VERIFIED；自动识别/配色 NOT IMPLEMENTED。** 未修改生产提取器、C++、DLL、已有缓存、游戏配置或安装文件，未解包或新增内存逆向。本轮研究完成后停止。
+
+
+
 ## 本地录制展示里程碑保存（2026-10-13）
 
 用户确认当前实际功能已可用于录制展示，要求保存阶段性版本。工作目录原本已有 MMFreeLyrics Git 仓库，但仍停在上游 86ca982，累计功能、工具及文档未提交。本阶段以本地 codex/recording-milestone-20261013 分支和 recording-ready-20261013 标签保存源码，更新 ImGui/公开 SRT parser 子模块固定版本，保留上游历史，不发布 GitHub。

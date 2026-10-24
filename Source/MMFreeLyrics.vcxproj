@@ -276,12 +276,14 @@ del "$(OutputPath)*.lib"</Command>
     <ClInclude Include="managers\ktv_composite.h" />
     <ClInclude Include="managers\ktv_geometry.h" />
     <ClInclude Include="managers\non_vocal_manager.h" />
+    <ClInclude Include="managers\non_vocal_support.h" />
     <ClInclude Include="managers\obs_manager.h" />
     <ClInclude Include="globals.h" />
     <ClInclude Include="constant.h" />
     <ClInclude Include="utils\config.h" />
     <ClInclude Include="utils\helpers.h" />
     <ClInclude Include="utils\logging.h" />
+    <ClInclude Include="utils\performance_trace.h" />
     <ClInclude Include="utils\sigscan.h" />
     <ClInclude Include="utils\stringutils.h" />
   </ItemGroup>
@@ -332,6 +334,7 @@ del "$(OutputPath)*.lib"</Command>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Build Mod Archive|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="utils\config.cpp" />
+    <ClCompile Include="utils\performance_trace.cpp" />
     <ClCompile Include="utils\sigscan.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Build Mod Archive|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>

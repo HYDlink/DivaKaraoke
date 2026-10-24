@@ -78,8 +78,8 @@ def load_lyrics(pv_db_paths: list[Path], pv_id: int, allow_overrides: bool) -> d
     return lyrics
 
 
-def read_lyric_events(dsc_path: Path, opcode_lengths: dict[int, int], dsc_format: str) -> tuple[list[tuple[int, int]], int | None]:
-    """按既有 Open-PD 格式规则读取 TIME、LYRIC 与 PV_END。"""
+def read_lyric_events(dsc_path: Path, opcode_lengths: dict[int, int], dsc_format: str, command_observer=None) -> tuple[list[tuple[int, int]], int | None]:
+    """按既有格式读取事件；可选观察器只接收已解码命令，不改变原返回结果。"""
     data = dsc_path.read_bytes()
     header_size = FORMAT_HEADER_SIZES[dsc_format]
     if len(data) < header_size:
@@ -112,6 +112,9 @@ def read_lyric_events(dsc_path: Path, opcode_lengths: dict[int, int], dsc_format
             events.append((current_time, parameters[0]))
         elif opcode == PV_END_OPCODE:
             pv_end_time = current_time
+        # 可选命令观察器参数：提供命令序号、字节偏移、opcode、原始时间及参数。
+        if command_observer is not None:
+            command_observer(command_count, offset - 4 * (parameter_count + 1), opcode, current_time, parameters)
     return events, pv_end_time
 
 

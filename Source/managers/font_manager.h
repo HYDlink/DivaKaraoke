@@ -18,9 +18,8 @@ public:
     bool reloadFonts = false;
     // Current Charset buffer
     std::map<wchar_t, int> charset;
-    // PVDB & Charset buffer
-    std::map<int, std::string> PVDB_Buffer;
-    std::map<int, std::map<wchar_t, int>> PVDB_Charset_Buffer;
+    // 每次重建递增，供几何缓存识别可能复用原地址的新字体。
+    unsigned long long atlasRevision = 0;
     // Configurable
     float fontSize;
     float fontSizeImGui;

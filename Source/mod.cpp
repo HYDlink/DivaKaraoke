@@ -3,6 +3,7 @@
 #include <managers/lyric_manager.h>
 #include <managers/non_vocal_manager.h>
 #include <managers/obs_manager.h>
+#include <utils/performance_trace.h>
 #include <imgui/imgui_internal.h>
 #pragma warning( disable : 26495 26812 )
 // Signatures
@@ -40,20 +41,6 @@ SIG_SCAN
 	0x1402AC960,
 	"\x4C\x8B\x05\x00\x00\x00\x00\x4D\x85\xC0\x74\x35\x4C\x63\xC9\x48\xB8\x00\x00\x00\x00\x00\x00\x00\x00\x49\x8B\x48\x08\x49\x2B\x08\x48\xF7\xE9",
 	"xxx????xxxxxxxxxx????????xxxxxxxxxx"
-)
-SIG_SCAN
-(
-	sigCopyCharsByCount,
-	0x140192673,
-	"\x48\x8B\xC2\x4D\x85\xC0\x74\x26\x4D\x8D\x48\xFF\x4C\x03\xC9\x49\x3B\xC9\x74\x17\x44\x0F\xB6\x00",
-	"xxxxxxxxxxxxxxxxxxxxxxxx"
-)
-SIG_SCAN
-(
-	sigPVDBLookup,
-	0x14018B100,
-	"\x40\x53\x55\x41\x54\x41\x56\x41\x57\x48\x83\xEC\x40\x48\x8B\x05\x00\x00\x00\x00\x48\x33\xC4\x48\x89\x44\x24\x00",
-	"xxxxxxxxxxxxxxxx????xxxxxxx?"
 )
 SIG_SCAN(
 	sigDivaPlayback,
@@ -114,12 +101,15 @@ HOOK(char*, __fastcall, _LoadSongAudio, sigLoadSongAudio(),
 HOOK(INT64, __fastcall, _ChangeGameState, sigChangeGameState(), INT64* a, const char* state) {
 	// 状态切换可能释放歌曲对象，音频恢复必须在原函数之前完成。
 	NonVocalManager_Inst.OnGameState(state);
+	// 结束信号须在原函数切出 PV 画面前发布，避免遗漏单曲结果画面及额外轮询延迟。
+	const bool obsEnding = ObsPvSession::IsEndState(state);
+	if (obsEnding) ObsManager_Inst.OnGameState(state);
 	INT64 result = original_ChangeGameState(a, state);
 #ifdef _DEBUG
 	LOG(L"Gamestate changed to : %S", state);
 #endif // DEBUG
 	LyricManager_Inst.UpdateGameState(state);
-	ObsManager_Inst.OnGameState(state);
+	if (!obsEnding) ObsManager_Inst.OnGameState(state);
 	return result;
 }
 HOOK(void**, __fastcall, _RenderLyricAndTitle, sigRenderLyricAndTitle(),
@@ -132,18 +122,14 @@ HOOK(void**, __fastcall, _RenderLyricAndTitle, sigRenderLyricAndTitle(),
 	unsigned int a7,
 	void** a8)
 {
-	// 歌词文本缓冲仅在 hook 首次执行时创建，避免 DLL 装载期构造 std::string。
-	static std::string lyricsBuffer;
 	bool isLyric = y == 172.0f;
 	if (isLyric) {
 		// 原版歌词开关仅控制游戏渲染文本，KTV 缓存层由独立开关控制。
-		lyricsBuffer = text ? text : "";
-		const char* displayedText = LyricManager_Inst.showInternalLyrics ? lyricsBuffer.c_str() : "";
+		const char* displayedText = LyricManager_Inst.showInternalLyrics && text ? text : "";
 		return original_RenderLyricAndTitle(y, x, scale, a4, displayedText, a6, a7, a8);
 	}
 	else {
-		LyricManager_Inst.SetLyricLine(false, NULL);
-		return original_RenderLyricAndTitle(y, x, scale, a4, text, a6, a7, a8);;
+		return original_RenderLyricAndTitle(y, x, scale, a4, text, a6, a7, a8);
 	}
 }
 
@@ -167,38 +153,6 @@ HOOK(void*, __fastcall, _GetInputState, sigGetInputState(), int player) {
 	return result;
 }
 
-HOOK(char, __fastcall, _CopyCharsByCount, sigCopyCharsByCount(), const char* out, const char* in, int length) {
-	if (length == 0x4C && LyricManager_Inst.shouldShowLyrics()) {
-		// Magic number! 76 chars is only used during lyrics rendering
-		LyricManager_Inst.SetLyricLine(true, in);
-	}
-	return original_CopyCharsByCount(out, in, length);
-}
-
-HOOK(__int64*, __fastcall, _PVDBLookup, sigPVDBLookup(), __int64* tbl_address_end, __int64* tbl_address, char** tbl_name) {
-	auto result = original_PVDBLookup(tbl_address_end, tbl_address, tbl_name);
-	int n = (tbl_address_end - tbl_address) / 8;
-	if (n >= 7 && strlen(*tbl_name) == 7) {
-		int pvid; sscanf_s(*tbl_name, "pv_%d.", &pvid);
-		if (pvid == 0) // New pv_db (or mod_ variant) is loaded
-		{
-			// The pv_db content, once read by MM+ , will be cleared at once
-			// Copy it at init time (id=0) for our own uses.
-			char* pvdb_buffer = (char*)(*(tbl_address_end)+3);
-			std::istringstream pvdb(pvdb_buffer);
-			std::string pvdb_line;
-			while (std::getline(pvdb, pvdb_line)) {
-				try
-				{
-					auto pvid = std::stoi(pvdb_line.substr(3, 3));
-					FontManager_Inst.PVDB_Buffer[pvid].append(pvdb_line);
-				}
-				catch (...) {}
-			}
-		}
-	}
-	return result;
-}
 void CreateRenderTarget()
 {
 	ID3D11Texture2D* pBackBuffer;
@@ -281,8 +235,6 @@ void WriteSignatureDiagnostics() {
 	diagnostics << "sigLoadSongAudio=0x" << std::hex << (uint64_t)sigLoadSongAudioAddr << "\n";
 	diagnostics << "sigUpdateLyrics=0x" << std::hex << (uint64_t)sigUpdateLyricsAddr << "\n";
 	diagnostics << "sigGetInputState=0x" << std::hex << (uint64_t)sigGetInputStateAddr << "\n";
-	diagnostics << "sigCopyCharsByCount=0x" << std::hex << (uint64_t)sigCopyCharsByCountAddr << "\n";
-	diagnostics << "sigPVDBLookup=0x" << std::hex << (uint64_t)sigPVDBLookupAddr << "\n";
 	diagnostics << "sigDivaPlayback=0x" << std::hex << (uint64_t)sigDivaPlaybackAddr << "\n";
 	diagnostics << "sigDivaPlayback2=0x" << std::hex << (uint64_t)sigDivaPlayback2Addr << "\n";
 	diagnostics << "sigPvSelectorApplySel=0x" << std::hex << (uint64_t)sigpv_selector_switch__PvSelector__applySelAddr << "\n";
@@ -304,16 +256,14 @@ bool InitializeGameAddresses() {
 	sigLoadSongAudio();
 	sigUpdateLyrics();
 	sigGetInputState();
-	sigCopyCharsByCount();
-	sigPVDBLookup();
 	sigDivaPlayback();
 	sigDivaPlayback2();
 	sigpv_selector_switch__PvSelector__applySel();
 	sigMegaMix__CreateTaskWaitScreen();
 	WriteSignatureDiagnostics();
 	if (!sigChangeGameStateAddr || !sigRenderLyricAndTitleAddr || !sigLoadSongAudioAddr ||
-		!sigUpdateLyricsAddr || !sigGetInputStateAddr || !sigCopyCharsByCountAddr ||
-		!sigPVDBLookupAddr || !sigDivaPlaybackAddr || !sigDivaPlayback2Addr ||
+		!sigUpdateLyricsAddr || !sigGetInputStateAddr ||
+		!sigDivaPlaybackAddr || !sigDivaPlayback2Addr ||
 		!sigpv_selector_switch__PvSelector__applySelAddr || !sigMegaMix__CreateTaskWaitScreenAddr) {
 		LOG(L"游戏版本签名不完整，已跳过歌词 Hook 以避免游戏崩溃。");
 		return false;
@@ -324,8 +274,6 @@ bool InitializeGameAddresses() {
 	original_LoadSongAudio = (__LoadSongAudio*)sigLoadSongAudioAddr;
 	original_UpdateLyrics = (__UpdateLyrics*)sigUpdateLyricsAddr;
 	original_GetInputState = (__GetInputState*)sigGetInputStateAddr;
-	original_CopyCharsByCount = (__CopyCharsByCount*)sigCopyCharsByCountAddr;
-	original_PVDBLookup = (__PVDBLookup*)sigPVDBLookupAddr;
 	original_DivaPlayback = (__DivaPlayback*)sigDivaPlaybackAddr;
 	getPlaybackStatus2 = (DivaPlaybackStatus2* (__fastcall*)())sigDivaPlayback2Addr;
 	getPvSelAddr = (PvSelector* (__fastcall*)())readRelCall16Address((uint64_t)sigpv_selector_switch__PvSelector__applySelAddr + 0x1D0);
@@ -375,10 +323,15 @@ extern "C"
 
 		ImGui_ImplWin32_Init(window);
 		ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
+		RECT clientRect{};
+		if (GetClientRect(window, &clientRect))
+			PrepareKtvCompositeResources(ImVec2((float)(clientRect.right - clientRect.left),
+				(float)(clientRect.bottom - clientRect.top)));
 	}
 	void __declspec(dllexport) Init() {
 		// 加载器已离开 loader lock 后才解析 DLL 路径，避免 DllMain 中分配字符串导致加载失败。
 		InitializeDllFilePath();
+		TraceLoggingRegister(g_divaPerformanceProvider);
 		// 全局配置对象只在此处填充默认值，避免 DLL 装载期执行业务初始化。
 		GlobalConfig_Inst.LoadDefault();
 		if (!InitializeGameAddresses())
@@ -393,10 +346,6 @@ extern "C"
 		WriteInitializationStage("hook-update-lyrics");
 		INSTALL_HOOK(_GetInputState);
 		WriteInitializationStage("hook-get-input-state");
-		INSTALL_HOOK(_CopyCharsByCount);
-		WriteInitializationStage("hook-copy-chars-by-count");
-		INSTALL_HOOK(_PVDBLookup);
-		WriteInitializationStage("hook-pvdb-lookup");
 		INSTALL_HOOK(_DivaPlayback);
 		WriteInitializationStage("hook-diva-playback");
 		ImGui::CreateContext();
@@ -426,20 +375,25 @@ extern "C"
 		WriteInitializationStage("pv-tools-init");
 	}
 	void __declspec(dllexport) OnFrame(IDXGISwapChain* m_pSwapChain) {
-		LyricManager_Inst.OnFrame();
-		NonVocalManager_Inst.OnFrame();
-		ObsManager_Inst.OnFrame();
-		FontManager_Inst.OnFrame();
+		DivaPerformanceScope frameScope("帧总耗时");
+		{ DivaPerformanceScope scope("歌词状态"); LyricManager_Inst.OnFrame(); }
+		{ DivaPerformanceScope scope("音频控制"); NonVocalManager_Inst.OnFrame(); }
+		{ DivaPerformanceScope scope("OBS状态"); ObsManager_Inst.OnFrame(); }
+		{ DivaPerformanceScope scope("字体更新"); FontManager_Inst.OnFrame(); }
+		{ DivaPerformanceScope scope("透明合成资源预热"); PrepareKtvCompositeResources(ImGui::GetIO().DisplaySize); }
 
-		ImGui_ImplDX11_NewFrame();
-		ImGui_ImplWin32_NewFrame();
-		ImGui::NewFrame();
+		{
+			DivaPerformanceScope scope("图形帧准备及图集上传");
+			ImGui_ImplDX11_NewFrame();
+			ImGui_ImplWin32_NewFrame();
+			ImGui::NewFrame();
+		}
 
-		LyricManager_Inst.OnImGUI();
-		FontManager_Inst.OnImGUI();
-		DrawPvToolsPanel();
+		{ DivaPerformanceScope scope("歌词及注音绘制"); LyricManager_Inst.OnImGUI(); }
+		{ DivaPerformanceScope scope("字体面板"); FontManager_Inst.OnImGUI(); }
+		{ DivaPerformanceScope scope("音频及OBS面板"); DrawPvToolsPanel(); }
 
-		ImGui::Render();
-		ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+		{ DivaPerformanceScope scope("绘制数据生成"); ImGui::Render(); }
+		{ DivaPerformanceScope scope("DX11提交及透明合成"); ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData()); }
 	}
 }

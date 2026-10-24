@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- 保持 Release 优化，仅附加本机性能分析所需的函数与行号符号。 -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ProgramDataBaseFileName>$(IntDir)MMFreeLyrics.compile.pdb</ProgramDataBaseFileName>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
+      <ProgramDatabaseFile>$(OutDir)MMFreeLyrics.pdb</ProgramDatabaseFile>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- 基线源码在修改前留存；仅显式要求基线构建时替换编译输入。 -->
+  <PropertyGroup Condition="'$(PerformanceBaseline)'=='true'">
+    <PerformanceBaselineRoot>$(ProjectDir)..\artifacts\performance-investigation\baseline-source\</PerformanceBaselineRoot>
+    <IncludePath>$(PerformanceBaselineRoot);$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(PerformanceBaseline)'=='true'">
+    <ClCompile Remove="managers\lyric_manager.cpp;managers\font_manager.cpp;managers\obs_manager.cpp;managers\non_vocal_manager.cpp;mod.cpp" />
+    <ClCompile Include="$(PerformanceBaselineRoot)lyric_manager.cpp" />
+    <ClCompile Include="$(PerformanceBaselineRoot)font_manager.cpp" />
+    <ClCompile Include="$(PerformanceBaselineRoot)obs_manager.cpp" />
+    <ClCompile Include="$(PerformanceBaselineRoot)non_vocal_manager.cpp" />
+    <ClCompile Include="$(PerformanceBaselineRoot)mod.cpp" />
+  </ItemGroup>
+</Project>

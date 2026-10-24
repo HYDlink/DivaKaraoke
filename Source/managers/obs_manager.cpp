@@ -57,6 +57,11 @@ void ObsManager::EnsureWorker() {
 
 // 中文曲名编码成十六进制，避免空格、换行和管道协议分隔符冲突。
 void ObsManager::Publish() {
+    const bool record = enabled && autoRecord;
+    if (hasPublished && publishedEpoch == session.epoch && publishedPvid == session.pvid &&
+        publishedActive == session.active && publishedAutoRecord == record &&
+        publishedTestCounter == testCounter && publishedNonVocal == nonVocal && publishedTitle == title)
+        return;
     std::ostringstream out;
     out << "v2 " << GetCurrentProcessId() << " " << session.epoch << " "
         << (enabled && autoRecord ? 1 : 0) << " " << (session.active ? 1 : 0)
@@ -67,6 +72,15 @@ void ObsManager::Publish() {
     out << "\n";
     std::lock_guard<std::mutex> lock(guard);
     request = out.str();
+    publishedEpoch = session.epoch;
+    publishedPvid = session.pvid;
+    publishedActive = session.active;
+    publishedAutoRecord = record;
+    publishedTestCounter = testCounter;
+    publishedNonVocal = nonVocal;
+    publishedTitle = title;
+    hasPublished = true;
+    workerWake.notify_one();
 }
 
 // 游戏线程只排队，后台落盘；每秒采样一次，并立即记录边界事件。
@@ -96,7 +110,7 @@ void ObsManager::OnSongAudio(const std::string& path) {
     Publish();
 }
 
-// 已有 PV 进入/选曲事件不新增签名或 hook。
+// 单曲结果画面与列表切歌均结束本首；准备事件仍在原游戏切换完成后读取标题。
 void ObsManager::OnGameState(const char* state) {
     std::lock_guard<std::mutex> lifecycleLock(lifecycleGuard);
     if (!initialized || !state) return;
@@ -107,7 +121,7 @@ void ObsManager::OnGameState(const char* state) {
         // 标题沿用游戏当前生效的数据；过长或无标题时由 Helper 使用 PVID 后备。
         if (title.size() > 1000) title.clear();
     }
-    Trace("状态切换");
+    Trace(state && strcmp(state, "GameResultTask") == 0 ? "单曲自然结束" : "状态切换");
     Publish();
 }
 
@@ -191,7 +205,10 @@ void ObsManager::Worker() {
             previous = current;
             last = std::chrono::steady_clock::now();
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(40));
+        std::unique_lock<std::mutex> lock(guard);
+        workerWake.wait_until(lock, last + std::chrono::seconds(1), [&] {
+            return request != previous || !diagnostics.empty();
+        });
     }
 }
 
@@ -212,5 +229,5 @@ void ObsManager::OnImGUI() {
     std::string current;
     { std::lock_guard<std::mutex> lock(guard); current = status; }
     ImGui::TextWrapped("状态：%s", current.c_str());
-    ImGui::TextWrapped("每首按游戏曲名及 On Vocal / Non Vocal 命名，录完继续待命。暂停 PV 仍继续录制。");
+    ImGui::TextWrapped("每首按游戏曲名及 On Vocal / Non Vocal 命名，单曲播完自动保存并继续待命。中途暂停 PV 仍继续录制。");
 }

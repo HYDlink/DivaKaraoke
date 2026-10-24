@@ -79,10 +79,8 @@ Config& FontManager::ToConfig(Config& cfg) {
 - Otherwise, it would use a fallback charset which would cover most Japanese characters & Romal characters
 */
 int FontManager::UpdateCharset(std::wstring chars) {
-	LOG(L"Enumerating unique characters...");
 	size_t size_before = charset.size();
 	for (auto& c : chars) if (c) charset[c] = 1;
-	LOG(L"%zd new unique characters (out of %zd) will be built into atlas.", charset.size() - size_before, chars.size());
 	return (int)(charset.size() - size_before);
 }
 
@@ -138,6 +136,7 @@ void FontManager::RebuildFonts() {
 		// 常用中文范围不含所有工具文字，补齐两项模块的中文字符，避免显示问号。
 		ImFontGlyphRangesBuilder uiBuilder;
 		uiBuilder.AddRanges(io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+		uiBuilder.AddText(u8"逐行歌手颜色启用合唱柔和渐变关闭融合纯本曲标记未识别使用默认其他初音镜铃连巡填充描边已阴影恢复此保存重新读取即时预览包含四色上下取消整句横向");
 		uiBuilder.AddText(u8"一下不与专丢中为主义乐事于交人仅仍以件会伴似体使例供依保信修停允先免入关具内再准凑出函分则初别到制前功加动化匹单即卸历原去及反发取受变口另只可台史号同名后听启周命和回因固在地址均坏基增声复外失奏始字存安完定实容密对将就尾局工已帧常并序应延建开异弃式当录径待心快态恢感戏成或户所才执找护拒拥择持损换接控提播支收改放效数整新无既旧时明是显暂曲更有期未本机束条来果查标校核检模次歌止此步段每求汇没法测消淡混游源点热然照版状狗独猜理生用由界留的益盖目相看真知码确示离秒程立等签管紧约级纳线终绑结绝继绪续编置而联能自菜行补装覆认许设证词试话语误请读调象败资赏赖起超足路跳身轨转载辑边过运进连迟退送适选逐通逻道避部都配释重量鉴错门闭限除隔静非音项频题驻验默" );
 		static ImVector<ImWchar> uiRanges;
 		uiBuilder.BuildRanges(&uiRanges);
@@ -148,7 +147,7 @@ void FontManager::RebuildFonts() {
 	// Setting up styles
 	if (isBold) config.FontBuilderFlags |= ImGuiFreeTypeBuilderFlags_Bold;
 	if (isItalic) config.FontBuilderFlags |= ImGuiFreeTypeBuilderFlags_Oblique;
-	LOG(L"Now rebuilding fonts atlas,please wait...");
+	LOG(L"正在重建字体图集，请稍候。");
 	// 歌词图集按当前输出分辨率生成；ImGui 控制面板仍保持固定字号。
 	const float lyricAtlasFontSize = fontSize * lyricAtlasScale;
 	if (fontnameDefault) {
@@ -183,7 +182,8 @@ void FontManager::RebuildFonts() {
 		);
 	}
 	io.Fonts->Build();
-	LOG(L"Built font atlas.");
+	++atlasRevision;
+	LOG(L"字体图集重建完成。");
 }
 
 /* 以 1080p 为基准确定歌词物理字号，分辨率改变时安排下一帧重建高分辨率图集。 */

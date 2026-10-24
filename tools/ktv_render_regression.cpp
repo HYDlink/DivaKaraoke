@@ -10,6 +10,8 @@
 #include "../Source/managers/ktv_composite.h"
 #include "../Source/managers/ktv_timing.h"
 #include "../Source/managers/ktv_geometry.h"
+#include "../Source/managers/singer_style.h"
+#include "../Source/managers/singer_render.h"
 
 static ID3D11Device* device = nullptr;
 static ID3D11DeviceContext* context = nullptr;
@@ -181,8 +183,89 @@ std::vector<unsigned char> ReadPixels(ID3D11Texture2D* texture) {
     return result;
 }
 
+
+// 验证分带裁剪没有缺口、重叠或纹理错位，注音单独使用自身真实字形边界。
+void VerifyVerticalSingerGlyphs(ImFont* font) {
+    std::map<std::string, SingerPalette> palettes = { {"MIK",DefaultSingerPalette("MIK")}, {"RIN",DefaultSingerPalette("RIN")}, {"LUK",DefaultSingerPalette("LUK")} };
+    palettes["MIK"].afterStroke = ImVec4(0.4f,0.1f,0.2f,0.4f);
+    palettes["RIN"].afterStroke = ImVec4(0.1f,0.2f,0.6f,0.9f);
+    const KtvTextStyle fallback = { ImVec4(1,1,1,1),ImVec4(0,0,0,1),ImVec4(0,0,0,0.5f) };
+    for (float size : {18.0f,94.0f,188.0f}) for (bool after : {false,true}) for (int people : {2,3}) for (int layerIndex=0;layerIndex<3;++layerIndex) {
+        const std::vector<std::string> ids = people==2 ? std::vector<std::string>{"MIK","RIN"} : std::vector<std::string>{"MIK","RIN","LUK"};
+        const auto style = ResolveSingerStyle(ids,palettes,after,true,fallback,10,500,true);
+        const auto& stops = layerIndex==0 ? style.fillStops : layerIndex==1 ? style.strokeStops : style.shadowStops;
+        const ImVec2 position(10.7f,21.8f);
+        const char* text = size==18 ? u8"ねぼ" : u8"寝ぼけ";
+        const float clipX = 10 + font->CalcTextSizeA(size,FLT_MAX,0,text).x*0.67f;
+        ImDrawList reference(ImGui::GetDrawListSharedData()), actual(ImGui::GetDrawListSharedData());
+        for (auto* draw : {&reference,&actual}) {
+            draw->_ResetForNewFrame(); draw->PushTextureID(font->ContainerAtlas->TexID);
+            draw->PushClipRect(ImVec2(0,0),ImVec2(clipX,1000));
+        }
+        const ImVec4 clip(0,0,clipX,1000);
+        bool distinct=false;
+        for(const auto& stop:stops) distinct=distinct || stop.x!=stops.front().x || stop.y!=stops.front().y || stop.z!=stops.front().z || stop.w!=stops.front().w;
+        reference.AddText(font,size,position,IM_COL32_WHITE,text,nullptr,0,distinct?&clip:nullptr);
+        AddSingerStyledText(&actual,font,size,position,text,style,layerIndex,0.5f);
+        Require(actual.VtxBuffer.Size>0 && actual.VtxBuffer.Size%4==0,"上下渐变没有有效字形四边形");
+        double sourceArea=0,actualArea=0;
+        for (int k=0;k<reference.VtxBuffer.Size;k+=4) sourceArea+=(reference.VtxBuffer[k+2].pos.x-reference.VtxBuffer[k].pos.x)*(reference.VtxBuffer[k+2].pos.y-reference.VtxBuffer[k].pos.y);
+        const ImVec2 ink=GetSingerInkY(font,size,text,position.y);
+        for(int k=0;k<actual.VtxBuffer.Size;k+=4){
+            const auto& begin=actual.VtxBuffer[k];const auto& end=actual.VtxBuffer[k+2];
+            actualArea+=(end.pos.x-begin.pos.x)*(end.pos.y-begin.pos.y);
+            int source=-1;
+            for(int j=0;j<reference.VtxBuffer.Size;j+=4){const auto& a=reference.VtxBuffer[j];const auto& b=reference.VtxBuffer[j+2];
+                if(std::fabs(a.pos.x-begin.pos.x)<0.001f && std::fabs(b.pos.x-end.pos.x)<0.001f && begin.pos.y>=a.pos.y-0.001f && end.pos.y<=b.pos.y+0.001f){source=j;break;}}
+            Require(source>=0,"上下色带越出原始字形范围");
+            const auto& a=reference.VtxBuffer[source];const auto& b=reference.VtxBuffer[source+2];
+            for(int corner=0;corner<4;++corner){const auto& v=actual.VtxBuffer[k+corner];
+                const float u=a.uv.x+(b.uv.x-a.uv.x)*(v.pos.x-a.pos.x)/(b.pos.x-a.pos.x);
+                const float uvY=a.uv.y+(b.uv.y-a.uv.y)*(v.pos.y-a.pos.y)/(b.pos.y-a.pos.y);
+                Require(std::fabs(v.uv.x-u)<0.00001f && std::fabs(v.uv.y-uvY)<0.00001f,"上下裁剪没有正确插值字体UV");
+                ImVec4 expected=SampleSingerGradient(stops,(v.pos.y-ink.x)/(ink.y-ink.x),0.20f); expected.w*=0.5f;
+                Require(v.col==ImGui::ColorConvertFloat4ToU32(expected),"上下渐变层颜色或透明度不匹配");
+            }
+        }
+        Require(std::fabs(sourceArea-actualArea)<(std::max)(0.02,sourceArea*0.00001),"上下色带存在面积缺口或重叠");
+    }
+    printf("上下双色检查通过：两人/三人、完整四色与阴影、正文/注音、18/94/188字号、UV与色带覆盖。\n");
+}
+
+
+// 密集描边可能超过16位顶点索引容量，验证现有DX11顶点偏移路径仍正确。
+void VerifyVerticalIndexOffsets(ImFont* font) {
+    ImDrawList list(ImGui::GetDrawListSharedData());
+    list._ResetForNewFrame(); list.PushTextureID(font->ContainerAtlas->TexID);
+    list.PushClipRect(ImVec2(0,0),ImVec2(10000,1000));
+    Require((list.Flags & ImDrawListFlags_AllowVtxOffset)!=0,"现有后端缺少大字形顶点偏移支持");
+    const std::map<std::string,SingerPalette> palettes={{"MIK",DefaultSingerPalette("MIK")},{"RIN",DefaultSingerPalette("RIN")}};
+    const KtvTextStyle fallback={ImVec4(1,1,1,1),ImVec4(0,0,0,1),ImVec4(0,0,0,0.5f)};
+    const auto style=ResolveSingerStyle({"MIK","RIN"},palettes,false,true,fallback,10,10000,true);
+    std::string text;
+    for(int index=0;index<30;++index)text+=u8"寝";
+    for(int run=0;run<120;++run)AddSingerStyledText(&list,font,188,ImVec2(10,20),text.c_str(),style,1,1);
+    Require(list.VtxBuffer.Size>65535,"大字号验证未跨过索引边界");
+    bool offsetUsed=false;
+    for(const auto& command:list.CmdBuffer){
+        offsetUsed=offsetUsed || command.VtxOffset>0;
+        for(unsigned int index=0;index<command.ElemCount;++index)
+            Require(command.VtxOffset+list.IdxBuffer[command.IdxOffset+index]<(unsigned int)list.VtxBuffer.Size,"上下渐变存在越界顶点索引");
+    }
+    Require(offsetUsed,"超过16位容量后没有切换顶点偏移");
+    printf("大字号索引检查通过：%d个顶点，密集描边超过16位容量仍正确。\n",list.VtxBuffer.Size);
+}
+
+// 使用共享生产入口复现合唱描边、阴影与填充，并保持原有横向裁剪。
+void DrawRegressionSingerText(ImDrawList* list,ImFont* font,const KtvTextStyle& style){
+    AddSingerStyledText(list,font,64,ImVec2(34,27),u8"合唱",style,2,1);
+    for(int y=-3;y<=3;++y)for(int x=-3;x<=3;++x)if(x||y)
+        AddSingerStyledText(list,font,64,ImVec2(32.0f+x,24.0f+y),u8"合唱",style,1,1);
+    AddSingerStyledText(list,font,64,ImVec2(32,24),u8"合唱",style,0,1);
+}
+
 // 在软件 DX11 设备中复现密集描边，然后对整个结果应用透明度。
-std::vector<unsigned char> Render(ID3D11Texture2D* texture, ID3D11RenderTargetView* target, float opacity, bool composite) {
+std::vector<unsigned char> Render(ID3D11Texture2D* texture, ID3D11RenderTargetView* target, float opacity, bool composite, bool singerGradient = false, bool vertical = false, float progress = 1.0f) {
     const float background[4] = { 0.2f, 0.4f, 0.6f, 1.0f };
     context->OMSetRenderTargets(1, &target, nullptr);
     context->ClearRenderTargetView(target, background);
@@ -192,10 +275,29 @@ std::vector<unsigned char> Render(ID3D11Texture2D* texture, ID3D11RenderTargetVi
     if (composite) list->AddCallback(BeginLayer, nullptr);
     const int alpha = composite ? 255 : (int)(opacity * 255);
     ImFont* font = ImGui::GetIO().Fonts->Fonts[0];
+    if (vertical) {
+        font = ImGui::GetIO().Fonts->Fonts[1];
+        const std::map<std::string,SingerPalette> palettes = {{"MIK",DefaultSingerPalette("MIK")},{"RIN",DefaultSingerPalette("RIN")}};
+        const KtvTextStyle fallback = {ImVec4(1,1,1,1),ImVec4(0,0,0,1),ImVec4(0,0,0,0.5f)};
+        const float textWidth=font->CalcTextSizeA(64,FLT_MAX,0,u8"合唱").x;
+        for(bool after : {true,false}) {
+            if ((after && progress<=0) || (!after && progress>=1)) continue;
+            const auto style=ResolveSingerStyle({"MIK","RIN"},palettes,after,true,fallback,32,textWidth,true);
+            const ImVec2 clipMin=list->GetClipRectMin(),clipMax=list->GetClipRectMax();
+            list->PushClipRect(ImVec2(after?clipMin.x:32+textWidth*progress,clipMin.y),ImVec2(after?32+textWidth*progress:clipMax.x,clipMax.y),true);
+            DrawRegressionSingerText(list,font,style);
+            list->PopClipRect();
+        }
+    } else {
     for (int y = -5; y <= 5; y++)
         for (int x = -5; x <= 5; x++)
             if (x || y) list->AddText(font, 64, ImVec2(32.0f + x, 24.0f + y), IM_COL32(0, 0, 0, alpha), "KTV");
+    const int fillFirst = list->VtxBuffer.Size;
     list->AddText(font, 64, ImVec2(32, 24), IM_COL32(255, 240, 80, alpha), "KTV");
+    if (singerGradient) ApplySingerVertexGradient(list, fillFirst,
+        { DefaultSingerPalette("MIK").afterFill, DefaultSingerPalette("RIN").afterFill },
+        32, font->CalcTextSizeA(64, FLT_MAX, 0, "KTV").x, composite ? 1.0f : opacity);
+    }
     if (composite) {
         list->AddCallback(EndLayer, (void*)(uintptr_t)(opacity * 65535));
         list->AddCallback(ImDrawCallback_ResetRenderState, nullptr);
@@ -232,6 +334,21 @@ void SaveComparison(const std::vector<std::vector<unsigned char>>& frames) {
                 output.write((const char*)bgra, 4);
             }
         }
+    }
+}
+
+// 保存实际DX11字形渐变预览，供肉眼检查融合颜色及字体边缘。
+void SaveSingerGradientFrame(const std::vector<unsigned char>& pixels, const char* filename = "artifacts/singer-mvp/gradient-preview.bmp") {
+    BITMAPFILEHEADER file{}; BITMAPINFOHEADER info{};
+    info.biSize = sizeof(info); info.biWidth = width; info.biHeight = -(LONG)height;
+    info.biPlanes = 1; info.biBitCount = 32;
+    file.bfType = 0x4d42; file.bfOffBits = sizeof(file) + sizeof(info); file.bfSize = file.bfOffBits + width * height * 4;
+    std::ofstream output(filename, std::ios::binary);
+    Require(output.is_open(), "歌手渐变预览文件创建");
+    output.write((char*)&file, sizeof(file)); output.write((char*)&info, sizeof(info));
+    for (size_t index = 0; index < pixels.size(); index += 4) {
+        const unsigned char bgra[] = { pixels[index + 2], pixels[index + 1], pixels[index], pixels[index + 3] };
+        output.write((const char*)bgra, 4);
     }
 }
 
@@ -274,6 +391,7 @@ int main() {
     io.Fonts->AddFontDefault();
     ImFontGlyphRangesBuilder builder;
     builder.AddText(longLine.text.c_str());
+    builder.AddText(u8"合唱ねぼ");
     builder.AddText(u8"寝ぼけてるのさあいさつかきみずじょう");
     ImVector<ImWchar> japaneseRanges;
     builder.BuildRanges(&japaneseRanges);
@@ -286,6 +404,27 @@ int main() {
     ImGui_ImplDX11_Init(device, context);
     ImGui_ImplDX11_NewFrame();
     ImGui::NewFrame();
+    // 使用真实字形验证顶点渐变可作用于正文与小字号，且不会重建或破坏UV。
+    std::map<std::string, SingerPalette> palettes = { { "MIK", DefaultSingerPalette("MIK") }, { "RIN", DefaultSingerPalette("RIN") }, { "LUK", DefaultSingerPalette("LUK") } };
+    const KtvTextStyle fallback = { ImVec4(1,1,1,1), ImVec4(0,0,0,1), ImVec4(0,0,0,0.5f) };
+    const auto duet = ResolveSingerStyle({ "MIK", "RIN", "MIK" }, palettes, true, true, fallback, 10, 150);
+    Require(duet.fillStops.size() == 2 && duet.strokeStops.size() == 2, "同身份去重并保留填充及描边双端点");
+    Require(ResolveSingerStyle({ "MIK", "RIN", "LUK" }, palettes, false, true, fallback, 10, 150).fillStops.size() == 3, "三人组合渐变未支持");
+    Require(ResolveSingerStyle({}, palettes, true, true, fallback, 10, 150).fillStops.empty(), "未标记歌词没有回退默认样式");
+    Require(ResolveSingerStyle({"MIK","RIN"}, palettes, true, false, fallback, 10, 150).fillStops.empty(), "关闭渐变未使用融合纯色");
+    for (float textSize : { 18.0f, 94.0f, 188.0f }) {
+        ImDrawList glyphList(ImGui::GetDrawListSharedData());
+        glyphList._ResetForNewFrame(); glyphList.PushTextureID(io.Fonts->TexID); glyphList.PushClipRectFullScreen();
+        glyphList.AddText(epson, textSize, ImVec2(10, 10), IM_COL32_WHITE, u8"寝ぼけてるのさ");
+        Require(glyphList.VtxBuffer.Size > 0, "实际字形没有产生顶点");
+        const ImVec2 uv = glyphList.VtxBuffer[0].uv;
+        ApplySingerVertexGradient(&glyphList, 0, duet.fillStops, 10, 150, 0.5f);
+        Require(glyphList.VtxBuffer[0].uv.x == uv.x && glyphList.VtxBuffer[0].uv.y == uv.y, "渐变破坏字体纹理覆盖率");
+        Require(((glyphList.VtxBuffer[0].col >> IM_COL32_A_SHIFT) & 255) >= 127 && ((glyphList.VtxBuffer[0].col >> IM_COL32_A_SHIFT) & 255) <= 128, "渐变透明度没有同步应用");
+    }
+    printf("歌手渐变检查通过：单人回退、双人去重、三人组合、描边与18/94/188字号字形。\n");
+    VerifyVerticalSingerGlyphs(epson);
+    VerifyVerticalIndexOffsets(epson4k);
     VerifyKtvGeometry(epson, dfp, epson4k);
     ImGui::EndFrame();
     auto reference = Render(texture, target, 1.0f, true);
@@ -314,6 +453,19 @@ int main() {
     }
     for (float opacity : { 0.25f, 0.5f, 0.75f, 1.0f }) frames.push_back(Render(texture, target, opacity, false));
     SaveComparison(frames);
+    SaveSingerGradientFrame(Render(texture, target, 1.0f, true, true));
+    const auto verticalReference=Render(texture,target,1.0f,true,false,true);
+    const auto verticalHalf=Render(texture,target,0.5f,true,false,true);
+    int verticalError=0;
+    for(UINT y=0;y<90;++y)for(UINT x=0;x<width;++x)for(int channel=0;channel<3;++channel){
+        const size_t index=(y*width+x)*4+channel;
+        const int error=(int)std::ceil(std::fabs(verticalHalf[index]-(background[channel]+0.5f*(verticalReference[index]-background[channel]))));
+        verticalError=(std::max)(verticalError,error);
+    }
+    Require(verticalError<=2,"上下渐变破坏整层透明合成");
+    SaveSingerGradientFrame(verticalReference,"artifacts/singer-mvp/vertical-gradient-preview.bmp");
+    SaveSingerGradientFrame(Render(texture,target,1.0f,true,false,true,0.18f),"artifacts/singer-mvp/vertical-start-preview.bmp");
+    printf("上下双色真实DX11渲染通过：最大透明合成误差%d/255。\n",verticalError);
     ImGui_ImplDX11_Shutdown();
     ImGui::DestroyContext();
     target->Release(); texture->Release(); context->Release(); device->Release();

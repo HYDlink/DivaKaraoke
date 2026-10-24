@@ -52,14 +52,18 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--install-dir", type=Path, help="显式安装输出缓存到 lyrics 目录；保护自定义 SRT 和 Ruby TSV。")
     parser.add_argument("--install-only", action="store_true", help="仅安装输出目录内上次成功生成的缓存。")
     parser.add_argument("--rebuild-ruby-only", action="store_true", help="复用上次成功的时间线与 SRT，仅批量补齐振假名，不重新提取或转换。")
+    # 歌手补齐参数：仅复用成功缓存自动扫描多身份PV，并应用独立人工修订。
+    parser.add_argument("--rebuild-singers-only", action="store_true", help="仅补齐全部多身份PV的歌手标记，不重新生成歌词或注音。")
+    # 人工歌手修订目录参数：默认使用输出目录下manual-singers，文件不进入自动缓存替换。
+    parser.add_argument("--manual-singers-dir", type=Path, help="可选人工歌手修订目录；默认输出目录/manual-singers。")
     parser.add_argument("--janome-path", type=Path, default=ROOT / "tools/furigana_runtime", help="已有 Janome 离线运行库路径。")
     result = parser.parse_args()
-    if not result.install_only and not result.rebuild_ruby_only and not result.game_dir and not result.source_manifest:
+    if not result.install_only and not result.rebuild_ruby_only and not result.rebuild_singers_only and not result.game_dir and not result.source_manifest:
         parser.error("需要 --game-dir 或 --source-manifest。")
     if result.install_only and not result.install_dir:
         parser.error("--install-only 必须提供 --install-dir。")
-    if result.install_only and result.rebuild_ruby_only:
-        parser.error("--install-only 和 --rebuild-ruby-only 不可同时使用。")
+    if sum((result.install_only, result.rebuild_ruby_only, result.rebuild_singers_only)) > 1:
+        parser.error("安装、注音补齐、歌手补齐三个模式不可同时使用。")
     return result
 
 
@@ -354,6 +358,7 @@ def build(args: argparse.Namespace, sources: list[dict], work: Path) -> Path:
         entries.append({"pv_id": pv_id, "file": srt.name, "sha256": checksum(srt), "source_name": entry["source_name"], "dsc": entry["dsc"], "dsc_sha256": checksum(Path(entry["dsc"]))})
     write_json(publish / "export-manifest.json", {"schema_version": 1, "entries": entries, "replaced": replacements})
     generate_ruby_cache(publish, args.janome_path)
+    generate_singer_cache(publish, args.manual_singers_dir)
     return publish
 
 
@@ -398,16 +403,51 @@ def generate_ruby_cache(publish: Path, janome_path: Path) -> None:
     print(f"振假名生成完成：{len(document['entries'])} 首、{spans} 个汉字词组；{reviewed} 行需复核，其中 {uncovered_rows} 行/{uncovered_characters} 个汉字未可靠标注，详见注音审计。")
 
 
+def generate_singer_cache(publish: Path, manual_dir: Path) -> dict:
+    """在最终胜出歌词上自动生成多身份歌手标记，将结果纳入统一成套安装清单。"""
+    from build_singer_timeline import generate_cache_singers
+    document = json.loads((publish / "export-manifest.json").read_text(encoding="utf-8"))
+    for entry in document["entries"]:
+        prefix = f"PV{int(entry['pv_id']):03d}"
+        srt = publish / f"{prefix}.srt"
+        if checksum(srt) != entry["sha256"]:
+            raise ValueError(f"{prefix}歌词哈希已改变，拒绝生成错行歌手标记。")
+        run([sys.executable, str(ROOT / "scripts/verify_native_lyric_cache.py"), "--timeline-json", str(publish / f"{prefix}.json"), "--srt", str(srt)])
+    summary = generate_cache_singers(publish, publish, manual_dir=manual_dir)
+    by_id = {record["pv_id"]: record for record in summary["records"]}
+    for entry in document["entries"]:
+        record = by_id[int(entry["pv_id"])]
+        old_files = entry.get("files", [])
+        entry["files"] = [item for item in old_files if ".singers." not in item["file"]]
+        entry["singer"] = {key: record[key] for key in ("status", "identities", "reason", "unresolved_slots", "lines", "manual_lines", "unmapped_slots") if key in record}
+        if record["status"] == "generated":
+            entry["files"] += [{"file": name, "sha256": checksum(publish / name)} for name in record["files"]]
+        else:
+            for item in old_files:
+                if re.fullmatch(r"PV\d+\.singers\.(?:tsv|audit\.json|md)", item["file"]):
+                    path = publish / item["file"]
+                    if path.exists():
+                        path.unlink()
+    document["schema_version"] = 3
+    document["singer_generation"] = {key: summary[key] for key in ("scanned", "generated", "single_identity", "unresolved", "line_counts")}
+    document["singer_generation"]["manual_dir"] = str(manual_dir.resolve())
+    write_json(publish / "export-manifest.json", document)
+    return summary
+
+
 def manifest_files(document: dict, require_ruby: bool) -> list[dict]:
     """展开安装文件清单并校验文件名，兼容旧安装所有权而拒绝缺注音的新安装。"""
     result = []
     seen = set()
     for entry in document["entries"]:
         prefix = f"PV{int(entry['pv_id']):03d}"
-        allowed = {f"{prefix}.srt", f"{prefix}.ruby.tsv", f"{prefix}.ruby.audit.json"}
+        basic = {f"{prefix}.srt", f"{prefix}.ruby.tsv", f"{prefix}.ruby.audit.json"}
+        singer_files = {prefix + suffix for suffix in (".singers.tsv", ".singers.audit.json", ".singers.md")}
+        allowed = basic | singer_files
         files = entry.get("files", [{"file": entry["file"], "sha256": entry["sha256"]}])
-        if require_ruby and {item["file"] for item in files} != allowed:
-            raise ValueError(f"{prefix} 缺少完整 SRT/振假名/审计文件清单；请重新导出或使用 --rebuild-ruby-only。")
+        expected = basic | singer_files if entry.get("singer", {}).get("status") == "generated" else basic
+        if require_ruby and {item["file"] for item in files} != expected:
+            raise ValueError(f"{prefix} 缺少完整 SRT/振假名/歌手标记审计文件清单；请重新导出或使用 --rebuild-ruby-only。")
         for item in files:
             if item["file"] not in allowed or item["file"] in seen:
                 raise ValueError("生成清单包含无效或重复文件名。")
@@ -423,6 +463,13 @@ def install(cache: Path, destination: Path) -> dict:
     previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.is_file() else {"entries": []}
     files = manifest_files(document, require_ruby=True)
     owned = {item["file"]: item["sha256"] for item in manifest_files(previous, require_ruby=False)}
+    # 迁移旧六曲MVP明确记录的旁路所有权；仅新歌手清单允许认领，用户修改仍受哈希保护。
+    legacy_singers = destination.parent / "singer-mvp-manifest.json"
+    if document.get("schema_version", 0) >= 3 and legacy_singers.is_file():
+        for item in json.loads(legacy_singers.read_text(encoding="utf-8-sig"))["files"]:
+            match = re.fullmatch(r"lyrics[\\/](PV\d+\.singers\.tsv)", item["relative"])
+            if match and re.fullmatch(r"[0-9a-fA-F]{64}", item["sha256"]):
+                owned.setdefault(match[1], item["sha256"].lower())
     tasks, conflicts = [], []
     for entry in files:
         filename = entry["file"]
@@ -443,7 +490,7 @@ def install(cache: Path, destination: Path) -> dict:
     current = {entry["file"] for entry in files}
     removed, retained = [], []
     for filename, digest in owned.items():
-        if not re.fullmatch(r"PV\d+\.(?:srt|ruby\.tsv|ruby\.audit\.json)", filename) or filename in current:
+        if not re.fullmatch(r"PV\d+\.(?:srt|ruby\.tsv|ruby\.audit\.json|singers\.tsv|singers\.audit\.json|singers\.md)", filename) or filename in current:
             continue
         target = destination / filename
         if target.is_file() and checksum(target) == digest:
@@ -452,7 +499,7 @@ def install(cache: Path, destination: Path) -> dict:
         elif target.exists():
             retained.append(filename)
     write_json(previous_path, document)
-    print(f"安装完成：{len(document['entries'])} 首、{len(tasks)} 份歌词/注音文件；移除失效生成文件 {len(removed)} 份，保留用户修改 {len(retained)} 份。")
+    print(f"安装完成：{len(document['entries'])} 首、{len(tasks)} 份歌词/注音/歌手文件；移除失效生成文件 {len(removed)} 份，保留用户修改 {len(retained)} 份。")
     return {"installed": len(document["entries"]), "files_installed": len(tasks), "removed": removed, "retained": retained}
 
 
@@ -500,25 +547,29 @@ def publish_snapshot(publish: Path, output_dir: Path) -> Path:
 def main() -> int:
     """先暂存并完整验证，再发布成功快照；失败不覆盖上一次成功缓存。"""
     args = arguments()
-    for name in ("game_dir", "output_dir", "source_manifest", "extracted_root", "farcpack", "opcode_db", "install_dir", "janome_path"):
+    for name in ("game_dir", "output_dir", "source_manifest", "extracted_root", "farcpack", "opcode_db", "install_dir", "janome_path", "manual_singers_dir"):
         value = getattr(args, name)
         if value is not None:
             setattr(args, name, value.resolve())
+    if args.manual_singers_dir is None:
+        args.manual_singers_dir = args.output_dir / "manual-singers"
     try:
         if args.install_only:
             install(args.output_dir / "cache", args.install_dir)
             return 0
         args.output_dir.mkdir(parents=True, exist_ok=True)
-        if args.rebuild_ruby_only:
+        if args.rebuild_ruby_only or args.rebuild_singers_only:
             cache = safe_output_path(args.output_dir / "cache", args.output_dir)
             if not (cache / "export-manifest.json").is_file():
                 raise ValueError("没有成功导出缓存，不能仅补齐注音。")
             work = Path(tempfile.mkdtemp(prefix="ruby-build-", dir=args.output_dir))
             publish = work / "publish"
             shutil.copytree(cache, publish)
-            generate_ruby_cache(publish, args.janome_path)
+            if args.rebuild_ruby_only:
+                generate_ruby_cache(publish, args.janome_path)
+            generate_singer_cache(publish, args.manual_singers_dir)
             cache = publish_snapshot(publish, args.output_dir)
-            print(f"批量振假名补齐完成：{cache}；SRT 与原始时间线未重新提取。")
+            print(f"批量旁路补齐完成：{cache}；SRT 与原始时间线未重新提取。")
             if args.install_dir:
                 install(cache, args.install_dir)
             return 0

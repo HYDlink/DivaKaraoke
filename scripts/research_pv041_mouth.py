@@ -126,7 +126,11 @@ def analyse_source(label: str, dsc: Path, db_paths: list[Path], reference_pose: 
                 "last_other_pose_ms": other_poses[-1]["time_ms"] if other_poses else None,
                 "branch_counts": dict(Counter(command["branch"] for command in slot_commands)),
             }
-        rows.append({"line_number": number, **line, "slots": slots, "mouth_command_indices": [command["index"] for command in in_window]})
+        # 只记录相同姿态的近同时事件；二十毫秒配对不能当作声部真值。
+        left_poses = [command for command in in_window if command["params"][0] == 0 and command["params"][2] != reference_pose]
+        right_poses = [command for command in in_window if command["params"][0] == 1 and command["params"][2] != reference_pose]
+        near_pairs = sum(any(left["params"][2] == right["params"][2] and abs(left["raw_time"] - right["raw_time"]) <= 2000 for right in right_poses) for left in left_poses)
+        rows.append({"line_number": number, **line, "slots": slots, "same_pose_pairs_within_20ms": near_pairs, "mouth_command_indices": [command["index"] for command in in_window]})
     return {
         "label": label,
         "inputs": {"dsc": file_evidence(dsc), "pv_db": [file_evidence(path) for path in db_paths]},
@@ -203,7 +207,8 @@ def main() -> int:
             print(f"研究完成：{source['label']}，{len(source['lines'])}句非空歌词，{source['command_counts'].get('MOUTH_ANIM', 0)}条口型指令。")
         for comparison in comparisons:
             state = "一致" if comparison["exactly_matches_normal"] else "不同"
-            print(f"同曲难度核对：{comparison['difficulty']}，口型序列与 Normal {state}。")
+            difficulty_name = {"easy": "简单", "hard": "困难", "extreme": "极限"}[comparison["difficulty"]]
+            print(f"同曲难度核对：{difficulty_name}，口型序列与普通难度{state}。")
         print(f"研究证据目录：{arguments.output_dir.resolve()}")
         return 0
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:

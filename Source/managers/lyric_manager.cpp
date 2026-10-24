@@ -1,10 +1,12 @@
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include <globals.h>
 #include <managers/lyric_manager.h>
 #include <managers/ktv_timing.h>
 #include <managers/ktv_composite.h>
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <imgui/imgui_internal.h>
 #include <managers/ktv_geometry.h>
+#include <managers/singer_render.h>
+#include <utils/performance_trace.h>
 
 bool ImGui_CursorButton(const char* ID, ImGuiMouseCursor cursor, bool flipX = false, bool flipY = false) {
 	ImVec2 offset, size;
@@ -30,12 +32,11 @@ ImU32 ToOverlayColor(const ImVec4& color, float opacity = 1.0f) {
 	);
 }
 
-// 一组 KTV 字幕颜色，分别描述填充、描边与阴影。
-struct KtvTextStyle {
-	ImVec4 fill;
-	ImVec4 stroke;
-	ImVec4 shadow;
-};
+// 统一使用共享歌手渲染入口，正文、描边、阴影和注音遵循相同的合唱规则。
+void AddStyledKtvText(ImDrawList* list, ImFont* font, float size, const ImVec2& position,
+    const char* text, const KtvTextStyle& style, int layer, float opacity) {
+    AddSingerStyledText(list, font, size, position, text, style, layer, opacity);
+}
 
 // 绘制一层带阴影和描边的 KTV 歌词文本。
 void DrawKtvText(
@@ -49,23 +50,17 @@ void DrawKtvText(
 ) {
 	const float decorationScale = fontSize / FontManager_Inst.fontSize;
 	const ImVec2 shadowPosition = position + FontManager_Inst.shadowOffset * decorationScale;
-	drawList->AddText(font, fontSize, shadowPosition, ToOverlayColor(style.shadow, opacity), text);
+	AddStyledKtvText(drawList, font, fontSize, shadowPosition, text, style, 2, opacity);
 
 	const int outlineSize = (std::max)(1, (int)roundf(FontManager_Inst.strokeSize * decorationScale));
 	for (int offsetY = -outlineSize; offsetY <= outlineSize; offsetY++) {
 		for (int offsetX = -outlineSize; offsetX <= outlineSize; offsetX++) {
 			if (offsetX == 0 && offsetY == 0)
 				continue;
-			drawList->AddText(
-				font,
-				fontSize,
-				position + ImVec2((float)offsetX, (float)offsetY),
-				ToOverlayColor(style.stroke, opacity),
-				text
-			);
+			AddStyledKtvText(drawList, font, fontSize, position + ImVec2((float)offsetX, (float)offsetY), text, style, 1, opacity);
 		}
 	}
-	drawList->AddText(font, fontSize, position, ToOverlayColor(style.fill, opacity), text);
+	AddStyledKtvText(drawList, font, fontSize, position, text, style, 0, opacity);
 }
 
 // 已唱与未唱颜色各占独立裁剪区域，避免透明合成时两种颜色重叠。
@@ -109,14 +104,14 @@ void DrawSingleRubyCharacter(
 	const float decorationScale = fontSize / FontManager_Inst.fontSize;
 	const int outlineSize = (std::max)(1, (int)roundf(FontManager_Inst.strokeSize * decorationScale * 0.5f));
 	const ImVec2 shadowPosition = position + FontManager_Inst.shadowOffset * (0.45f * decorationScale);
-	drawList->AddText(font, fontSize, shadowPosition, ToOverlayColor(style.shadow, opacity), text);
+	AddStyledKtvText(drawList, font, fontSize, shadowPosition, text, style, 2, opacity);
 	for (int offsetY = -outlineSize; offsetY <= outlineSize; offsetY++) {
 		for (int offsetX = -outlineSize; offsetX <= outlineSize; offsetX++) {
 			if (offsetX != 0 || offsetY != 0)
-				drawList->AddText(font, fontSize, position + ImVec2((float)offsetX, (float)offsetY), ToOverlayColor(style.stroke, opacity), text);
+				AddStyledKtvText(drawList, font, fontSize, position + ImVec2((float)offsetX, (float)offsetY), text, style, 1, opacity);
 		}
 	}
-	drawList->AddText(font, fontSize, position, ToOverlayColor(style.fill, opacity), text);
+	AddStyledKtvText(drawList, font, fontSize, position, text, style, 0, opacity);
 }
 
 // 绘制词组 Ruby：短读音在底字组内等距分布，长读音保持缩放后的居中布局。
@@ -130,26 +125,35 @@ void DrawRubyText(
 	const KtvTextStyle& style,
 	float opacity = 1.0f
 ) {
-	const std::wstring wideText = to_wstr(text);
+	const int characterCount = ImTextCountCharsFromUtf8(text, nullptr);
 	const float naturalWidth = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text).x;
-	if (wideText.size() <= 1 || naturalWidth >= groupWidth) {
+	if (characterCount <= 1 || naturalWidth >= groupWidth) {
 		DrawSingleRubyCharacter(drawList, font, fontSize, ImVec2(position.x + (groupWidth - naturalWidth) * 0.5f, position.y), text, style, opacity);
 		return;
 	}
-	std::vector<std::string> glyphs;
 	float glyphWidthSum = 0.0f;
-	for (const wchar_t character : wideText) {
-		const std::string glyph = to_utf8(std::wstring(1, character));
-		glyphWidthSum += font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, glyph.c_str()).x;
-		glyphs.push_back(glyph);
+	const char* end = text + strlen(text);
+	for (const char* cursor = text; cursor < end;) {
+		unsigned int character;
+		const int bytes = ImTextCharFromUtf8(&character, cursor, end);
+		if (bytes <= 0) break;
+		glyphWidthSum += font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, cursor, cursor + bytes).x;
+		cursor += bytes;
 	}
 	const float freeWidth = (std::max)(0.0f, groupWidth - glyphWidthSum);
-	const float edgeSpacing = freeWidth / (2.0f * (float)glyphs.size());
+	const float edgeSpacing = freeWidth / (2.0f * (float)characterCount);
 	const float innerSpacing = edgeSpacing * 2.0f;
 	float x = position.x + edgeSpacing;
-	for (const std::string& glyph : glyphs) {
-		DrawSingleRubyCharacter(drawList, font, fontSize, ImVec2(x, position.y), glyph.c_str(), style, opacity);
-		x += font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, glyph.c_str()).x + innerSpacing;
+	for (const char* cursor = text; cursor < end;) {
+		unsigned int character;
+		const int bytes = ImTextCharFromUtf8(&character, cursor, end);
+		if (bytes <= 0) break;
+		// 单个 UTF-8 字符最长四字节，栈缓冲避免每帧逐字分配字符串。
+		char glyph[5] = {};
+		memcpy(glyph, cursor, bytes);
+		DrawSingleRubyCharacter(drawList, font, fontSize, ImVec2(x, position.y), glyph, style, opacity);
+		x += font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, glyph).x + innerSpacing;
+		cursor += bytes;
 	}
 }
 
@@ -240,6 +244,12 @@ KtvCompositeLayer& GetKtvCompositeLayer() {
 	return layer;
 }
 
+// 资源只在设备或分辨率改变时创建，其余帧是固定字段比较。
+void PrepareKtvCompositeResources(const ImVec2& viewportSize) {
+	if (viewportSize.x > 0 && viewportSize.y > 0)
+		GetKtvCompositeLayer().Prepare(g_pd3dDevice, (UINT)viewportSize.x, (UINT)viewportSize.y);
+}
+
 // 在实际 DX11 绘制阶段开始整行合成，失败时保留普通绘制并记录一次诊断。
 void BeginKtvComposite(const ImDrawList*, const ImDrawCmd*) {
 	static bool warned = false;
@@ -257,14 +267,66 @@ void EndKtvComposite(const ImDrawList*, const ImDrawCmd* command) {
 
 // 根据当前窗口、字体及用户安全边距计算该句的临时字号与位置。
 KtvLineGeometry GetRuntimeKtvLineGeometry(const LyricLine& line, int lane) {
+	return LyricManager_Inst.GetRenderGeometry(line, lane);
+}
+
+// 切歌后重置布局及几何；容量可复用，但不能复用上一曲的结果。
+void LyricManager::ClearRenderCache() {
+	renderLayouts.clear();
+	renderGeometries.clear();
+	renderGeometryReady.clear();
+	renderGeometryLanes.clear();
+	renderPreCueMs = -1;
+	renderFont = nullptr;
+}
+
+// 布局只依赖整首时间线和预告阈值，播放时钟改变不会使其失效。
+const std::vector<KtvLineLayout>& LyricManager::GetRenderLayouts() {
+	if (renderPreCueMs != ktvPreCueMs || renderLayouts.size() != lyricTimeline.size()) {
+		renderLayouts = BuildKtvLineLayouts(lyricTimeline, ktvPreCueMs);
+		renderPreCueMs = ktvPreCueMs;
+		renderGeometryReady.assign(lyricTimeline.size(), false);
+	}
+	return renderLayouts;
+}
+
+// 字体、装饰、安全区、分辨率或轨道位置改变时重新测量，其余帧直接复用几何。
+KtvLineGeometry LyricManager::GetRenderGeometry(const LyricLine& line, int lane) {
 	const ImVec2 viewport = ImGui::GetMainViewport()->Size;
 	const KtvGeometryStyle style = { FontManager_Inst.fontSize, FontManager_Inst.strokeSize,
-		FontManager_Inst.shadowOffset, LyricManager_Inst.lyricWindowOpacity > 0 ? 18.0f : 0.0f,
+		FontManager_Inst.shadowOffset, lyricWindowOpacity > 0 ? 18.0f : 0.0f,
 		FontManager_Inst.lyricAtlasScale };
-	return GetKtvLineGeometry(FontManager_Inst.font, FontManager_Inst.fontSize * FontManager_Inst.lyricAtlasScale,
-		line, style, lane, viewport.x * LyricManager_Inst.ktvCurrentColumnX,
-		viewport.x * LyricManager_Inst.ktvNextColumnX,
-		viewport.y * (lane == 0 ? LyricManager_Inst.ktvCurrentRowY : LyricManager_Inst.ktvNextRowY));
+	const std::array<float, 12> settings = { viewport.x, viewport.y, style.referenceFontSize,
+		(float)style.strokeSize, style.shadowOffset.x, style.shadowOffset.y, style.backgroundPadding,
+		style.displayScale, ktvCurrentColumnX, ktvNextColumnX, ktvCurrentRowY, ktvNextRowY };
+	// 两条轨道可以交替查询，轨道编号由每行独立保存，不参与全局失效。
+	if (renderFont != FontManager_Inst.font || renderFontRevision != FontManager_Inst.atlasRevision ||
+		renderGeometrySettings != settings || renderGeometries.size() != lyricTimeline.size()) {
+		renderFont = FontManager_Inst.font;
+		renderFontRevision = FontManager_Inst.atlasRevision;
+		renderGeometrySettings = settings;
+		renderGeometries.resize(lyricTimeline.size());
+		renderGeometryReady.assign(lyricTimeline.size(), false);
+		renderGeometryLanes.assign(lyricTimeline.size(), -1);
+	}
+	// 预览行不属于时间线，避免对无关对象执行指针相减。
+	const auto address = reinterpret_cast<uintptr_t>(&line);
+	const auto begin = reinterpret_cast<uintptr_t>(lyricTimeline.data());
+	const bool inTimeline = address >= begin && address - begin < lyricTimeline.size() * sizeof(LyricLine)
+		&& (address - begin) % sizeof(LyricLine) == 0;
+	const size_t index = inTimeline ? (address - begin) / sizeof(LyricLine) : 0;
+	if (inTimeline && renderGeometryReady[index] && renderGeometryLanes[index] == lane)
+		return renderGeometries[index];
+	const KtvLineGeometry geometry = GetKtvLineGeometry(FontManager_Inst.font,
+		style.referenceFontSize * style.displayScale, line, style, lane,
+		viewport.x * ktvCurrentColumnX, viewport.x * ktvNextColumnX,
+		viewport.y * (lane == 0 ? ktvCurrentRowY : ktvNextRowY));
+	if (inTimeline) {
+		renderGeometries[index] = geometry;
+		renderGeometryReady[index] = true;
+		renderGeometryLanes[index] = lane;
+	}
+	return geometry;
 }
 
 // 主歌词、振假名和背景使用同一个合成层，淡出时保留已唱进度。
@@ -276,8 +338,11 @@ void DrawKtvLine(ImDrawList* drawList, const LyricLine& line, int lane, float pr
 	ImFont* font = FontManager_Inst.font;
 	const ImVec2 size = geometry.textSize;
 	const ImVec2 position = geometry.position;
-	const KtvTextStyle before = { LyricManager_Inst.ktvBeforeFillColor, LyricManager_Inst.ktvBeforeStrokeColor, LyricManager_Inst.ktvBeforeShadowColor };
-	const KtvTextStyle after = { LyricManager_Inst.ktvAfterFillColor, LyricManager_Inst.ktvAfterStrokeColor, LyricManager_Inst.ktvAfterShadowColor };
+	const KtvTextStyle defaultBefore = { LyricManager_Inst.ktvBeforeFillColor, LyricManager_Inst.ktvBeforeStrokeColor, LyricManager_Inst.ktvBeforeShadowColor };
+	const KtvTextStyle defaultAfter = { LyricManager_Inst.ktvAfterFillColor, LyricManager_Inst.ktvAfterStrokeColor, LyricManager_Inst.ktvAfterShadowColor };
+	const std::vector<std::string> identities = LyricManager_Inst.singerColorsEnabled ? line.singers : std::vector<std::string>();
+	const KtvTextStyle before = ResolveSingerStyle(identities, LyricManager_Inst.singerPalettes, false, LyricManager_Inst.singerChorusGradient, defaultBefore, position.x, size.x, LyricManager_Inst.singerChorusVertical);
+	const KtvTextStyle after = ResolveSingerStyle(identities, LyricManager_Inst.singerPalettes, true, LyricManager_Inst.singerChorusGradient, defaultAfter, position.x, size.x, LyricManager_Inst.singerChorusVertical);
 	const bool composite = opacity < 1.0f;
 	if (composite) drawList->AddCallback(BeginKtvComposite, nullptr);
 	const float decorationScale = fontSize / FontManager_Inst.fontSize;
@@ -328,6 +393,7 @@ Config& LyricManager::FromConfig(Config& cfg) {
 	ktvPreviewEnabled = cfg.ktvPreviewEnabled;
 	ImGui::GetStyle().WindowBorderSize = cfg.WindowBorderSize;
 	ImGui::GetStyle().WindowRounding = cfg.WindowRounding;
+	LoadSingerSettings();
 	return cfg;
 }
 
@@ -358,6 +424,7 @@ Config& LyricManager::ToConfig(Config& cfg) {
 	cfg.ktvPreviewEnabled = ktvPreviewEnabled;
 	cfg.WindowBorderSize = ImGui::GetStyle().WindowBorderSize;
 	cfg.WindowRounding = ImGui::GetStyle().WindowRounding;
+	SaveSingerSettings();
 	return cfg;
 }
 
@@ -376,12 +443,13 @@ std::string LyricManager::GetCurrentLyricLine() {
 	const LyricLine* current = FindCurrentActiveLyric(CurrentTimestampMs());
 	if (current)
 		return current->text;
-	return internalLyricLine;
+	return {};
 }
 
 /* 将公开 SRT parser 的结果复制到项目自有时间线。 */
 bool LyricManager::LoadExternalLyrics(const std::wstring& filename) {
 	lyricTimeline.clear();
+	currentSingerIds.clear();
 	SubtitleParserFactory subParserFactory(to_utf8(filename));
 	SubtitleParser* parser = subParserFactory.getParser();
 	if (!parser)
@@ -406,6 +474,7 @@ bool LyricManager::LoadExternalLyrics(const std::wstring& filename) {
 
 	if (lyricTimeline.empty())
 		return false;
+	ClearRenderCache();
 	ResetDefaultCharset();
 	if (FontManager_Inst.UpdateCharset(charsetBuffer))
 		FontManager_Inst.reloadFonts = true;
@@ -469,6 +538,137 @@ bool LyricManager::LoadRubySidecar(const std::wstring& filename) {
 	return loadedSpanCount > 0;
 }
 
+// 读取强绑定字幕时间及全文的歌手旁路，错误时不保留上一首的身份集合。
+bool LyricManager::LoadSingerSidecar(const std::wstring& filename) {
+    currentSingerIds.clear();
+    for (auto& line : lyricTimeline) line.singers.clear();
+    std::ifstream input(std::filesystem::path(filename), std::ios::binary);
+    if (!input || !ReadSingerSidecar(input, loadedPvid, lyricTimeline, currentSingerIds)) return false;
+    for (const auto& identity : currentSingerIds)
+        if (!singerPalettes.count(identity)) singerPalettes.emplace(identity, DefaultSingerPalette(identity));
+    LOG(L"已加载歌手旁路：%zu 个不同身份，%zu 行绑定完成。", currentSingerIds.size(), lyricTimeline.size());
+    return true;
+}
+
+// 歌手配色使用独立文件，兼容旧配置并逐项拒绝不合法的新颜色。
+void LyricManager::LoadSingerSettings() {
+    singerColorsEnabled = true; singerChorusGradient = true; singerChorusVertical = true;
+    singerPalettes.clear();
+    for (const auto* identity : { "MIK", "RIN", "LEN", "KAI", "LUK", "MEI" })
+        singerPalettes.emplace(identity, DefaultSingerPalette(identity));
+    const auto path = FullPathInDllFolder(L"singer-colors.toml");
+    if (!std::filesystem::exists(path)) return;
+    try {
+        const auto config = toml::parse(path);
+        if (config.contains("enabled") && config.at("enabled").is_boolean()) singerColorsEnabled = config.at("enabled").as_boolean();
+        if (config.contains("chorus_gradient") && config.at("chorus_gradient").is_boolean()) singerChorusGradient = config.at("chorus_gradient").as_boolean();
+        if (config.contains("chorus_vertical") && config.at("chorus_vertical").is_boolean()) singerChorusVertical = config.at("chorus_vertical").as_boolean();
+        if (!config.contains("palettes") || !config.at("palettes").is_table()) return;
+        for (const auto& entry : config.at("palettes").as_table()) {
+            if (!IsSingerIdentity(entry.first) || !entry.second.is_table()) continue;
+            SingerPalette palette = DefaultSingerPalette(entry.first);
+            ImVec4* colors[] = { &palette.beforeFill, &palette.beforeStroke, &palette.beforeShadow, &palette.afterFill, &palette.afterStroke, &palette.afterShadow };
+            const char* keys[] = { "before_fill", "before_stroke", "before_shadow", "after_fill", "after_stroke", "after_shadow" };
+            for (int i = 0; i < 6; ++i) {
+                if (!entry.second.contains(keys[i]) || !entry.second.at(keys[i]).is_array()) continue;
+                const auto& values = entry.second.at(keys[i]).as_array();
+                if (values.size() != 4) continue;
+                bool valid = true; float channels[4];
+                for (int j = 0; j < 4; ++j) {
+                    valid = valid && (values[j].is_floating() || values[j].is_integer());
+                    if (valid) channels[j] = values[j].is_floating() ? (float)values[j].as_floating() : (float)values[j].as_integer();
+                }
+                if (valid) *colors[i] = ClampSingerColor(ImVec4(channels[0], channels[1], channels[2], channels[3]));
+            }
+            singerPalettes[entry.first] = palette;
+        }
+    } catch (const std::exception&) { LOG(L"歌手配色配置无效，使用默认歌手配色。"); }
+}
+
+// 保存歌手专用配置到临时文件后原子替换，旧歌词配置与字体设置保持独立。
+bool LyricManager::SaveSingerSettings() {
+    const std::wstring path = FullPathInDllFolder(L"singer-colors.toml");
+    const std::wstring temporary = path + L".tmp";
+    try {
+        toml::value config(toml::table{});
+        config["enabled"] = singerColorsEnabled; config["chorus_gradient"] = singerChorusGradient;
+        config["chorus_vertical"] = singerChorusVertical;
+        toml::value palettes(toml::table{});
+        for (const auto& entry : singerPalettes) {
+            if (!IsSingerIdentity(entry.first)) continue;
+            const SingerPalette& palette = entry.second;
+            const ImVec4 colors[] = { palette.beforeFill, palette.beforeStroke, palette.beforeShadow, palette.afterFill, palette.afterStroke, palette.afterShadow };
+            const char* keys[] = { "before_fill", "before_stroke", "before_shadow", "after_fill", "after_stroke", "after_shadow" };
+            toml::value record(toml::table{});
+            for (int i = 0; i < 6; ++i) {
+                const ImVec4 color = ClampSingerColor(colors[i]);
+                record[keys[i]] = toml::array{ toml::value((double)color.x), toml::value((double)color.y), toml::value((double)color.z), toml::value((double)color.w) };
+            }
+            palettes[entry.first] = record;
+        }
+        config["palettes"] = palettes;
+        std::ofstream output(std::filesystem::path(temporary), std::ios::binary | std::ios::trunc);
+        output << toml::format(config); output.close();
+        if (!output || !MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+            throw std::runtime_error("保存失败");
+        return true;
+    } catch (const std::exception&) { LOG(L"无法保存歌手配色配置，请检查模组目录权限。"); return false; }
+}
+
+// 显示当前第一、第二及更多歌手的完整配色，提供同一生产绘制路径的即时合唱预览。
+void LyricManager::DrawSingerColorPanel() {
+    ImGui::Separator();
+    ImGui::TextUnformatted(u8"逐行歌手颜色");
+    ImGui::Checkbox(u8"启用歌手配色", &singerColorsEnabled);
+    ImGui::Checkbox(u8"合唱柔和渐变（关闭为融合纯色）", &singerChorusGradient);
+    if (singerChorusGradient) ImGui::Checkbox(u8"上下双色（取消为整句横向渐变）", &singerChorusVertical);
+    size_t marked = 0;
+    for (const auto& line : lyricTimeline) if (!line.singers.empty()) ++marked;
+    ImGui::Text(u8"本曲标记：%zu / %zu 行；未识别行使用默认颜色", marked, lyricTimeline.size());
+    std::vector<std::string> identities = currentSingerIds;
+    if (identities.empty()) identities = { "MIK", "RIN" };
+    const size_t currentCount = identities.size();
+    for (const auto& entry : singerPalettes)
+        if (std::find(identities.begin(), identities.end(), entry.first) == identities.end()) identities.push_back(entry.first);
+    for (size_t index = 0; index < identities.size(); ++index) {
+        const std::string& identity = identities[index];
+        if (!singerPalettes.count(identity)) singerPalettes[identity] = DefaultSingerPalette(identity);
+        std::string label = index < currentCount ? std::string(u8"歌手 ") + std::to_string(index + 1) + " · " : std::string(u8"其他歌手 · ");
+        label += SingerDisplayName(identity); label += " (" + identity + ")";
+        ImGui::PushID(identity.c_str());
+        if (ImGui::CollapsingHeader(label.c_str(), index < 2 ? ImGuiTreeNodeFlags_DefaultOpen : 0)) {
+            SingerPalette& palette = singerPalettes[identity];
+            ImGui::ColorEdit4(u8"未唱填充", &palette.beforeFill.x);
+            ImGui::ColorEdit4(u8"未唱描边", &palette.beforeStroke.x);
+            ImGui::ColorEdit4(u8"已唱填充", &palette.afterFill.x);
+            ImGui::ColorEdit4(u8"已唱描边", &palette.afterStroke.x);
+            ImGui::ColorEdit4(u8"未唱阴影", &palette.beforeShadow.x);
+            ImGui::ColorEdit4(u8"已唱阴影", &palette.afterShadow.x);
+            if (ImGui::Button(u8"恢复此歌手默认色")) palette = DefaultSingerPalette(identity);
+        }
+        ImGui::PopID();
+    }
+    if (ImGui::Button(u8"保存歌手配色")) SaveSingerSettings();
+    ImGui::SameLine();
+    if (ImGui::Button(u8"重新读取歌手配色")) LoadSingerSettings();
+    if (!FontManager_Inst.font) return;
+    ImGui::TextUnformatted(u8"即时预览（包含未唱与已唱四色）");
+    const std::vector<std::vector<std::string>> combinations = { { identities[0] }, { identities.size() > 1 ? identities[1] : identities[0] }, { identities[0], identities.size() > 1 ? identities[1] : identities[0] } };
+    const char* samples[] = { u8"歌手一", u8"歌手二", u8"合唱" };
+    for (int i = 0; i < 3; ++i) {
+        const ImVec2 position = ImGui::GetCursorScreenPos();
+        const float size = 28.0f;
+        const ImVec2 textSize = FontManager_Inst.font->CalcTextSizeA(size, FLT_MAX, 0, samples[i]);
+        const KtvTextStyle fallbackBefore = { ktvBeforeFillColor, ktvBeforeStrokeColor, ktvBeforeShadowColor };
+        const KtvTextStyle fallbackAfter = { ktvAfterFillColor, ktvAfterStrokeColor, ktvAfterShadowColor };
+        const std::vector<std::string> ids = singerColorsEnabled ? combinations[i] : std::vector<std::string>();
+        const auto before = ResolveSingerStyle(ids, singerPalettes, false, singerChorusGradient, fallbackBefore, position.x, textSize.x, singerChorusVertical);
+        const auto after = ResolveSingerStyle(ids, singerPalettes, true, singerChorusGradient, fallbackAfter, position.x, textSize.x, singerChorusVertical);
+        DrawKtvWipeText(ImGui::GetWindowDrawList(), FontManager_Inst.font, size, position, textSize, samples[i], before, after, 0.56f);
+        ImGui::Dummy(ImVec2(textSize.x + 12, size + 10));
+    }
+}
+
 /* 返回应用外部字幕偏移后的播放时间。 */
 long LyricManager::CurrentTimestampMs() {
 	return (long)(TimeElapsed() * 1000) + exSubOffset;
@@ -492,26 +692,6 @@ const LyricLine* LyricManager::FindNextLyric(long timestampMs) const {
 	return NULL;
 }
 
-/* 记录原生歌词的行起点，并由下一次事件闭合上一行。 */
-void LyricManager::CaptureNativeLyric(const char* text) {
-	if (!text || text[0] == '\0' || activeNativeLyric == text)
-		return;
-	const long timestampMs = CurrentTimestampMs();
-	for (const LyricLine& line : nativeLyricTimeline) {
-		if (line.text == text && abs(line.startMs - timestampMs) <= 500) {
-			activeNativeLyric = text;
-			return;
-		}
-	}
-	if (!nativeLyricTimeline.empty())
-		nativeLyricTimeline.back().endMs = timestampMs > 0 ? timestampMs - 1 : 0;
-	nativeLyricTimeline.push_back({ timestampMs, 0x7FFFFFFF, text });
-	activeNativeLyric = text;
-	if (FontManager_Inst.UpdateCharset(to_wstr(text)))
-		FontManager_Inst.reloadFonts = true;
-	LOG(L"Captured native lyric event. Lines: %d", nativeLyricTimeline.size());
-}
-
 /* 按当前配置选择外部 SRT 或原生事件时间线。 */
 const LyricLine* LyricManager::FindCurrentActiveLyric(long timestampMs) const {
 	// KTV Overlay 只使用已加载的完整外部时间线，禁止回退到仅含当前句的原生事件。
@@ -531,19 +711,10 @@ void LyricManager::SetSongAudio(const char* src) {
 
 /* Set current index of lyric and flag for line updates. */
 void LyricManager::UpdateLyricIndex(int index) {
+	if (lyricIndex != index)
+		TraceDivaLyricChange(pvsel ? static_cast<int>(pvsel->PVID) : -1, index,
+			playbackStatus ? playbackStatus->currentPlaybackTime : -1.0f, showLyrics);
 	lyricIndex = index;
-	if (index == 0)
-	{
-		internalLyricLine.clear();
-	}
-}
-
-/* Set current lyric line */
-void LyricManager::SetLyricLine(bool isLyric, const char* src) {
-	if (isLyric && src) {
-		internalLyricLine = src;
-		CaptureNativeLyric(src);
-	}
 }
 
 // 每次 PV 准备完成都重新绑定歌词，播放列表切歌不要求先返回选曲界面。
@@ -564,6 +735,7 @@ void LyricManager::ResetDefaultCharset() {
 	FontManager_Inst.charset.clear();
 	FontManager_Inst.UpdateCharset(to_wstr(LYRIC_PLACEHOLDER_MESSAGE));
 	FontManager_Inst.UpdateCharset(to_wstr(lyricFormat));
+	FontManager_Inst.UpdateCharset(to_wstr(u8"歌手一歌手二合唱"));
 }
 
 // 记录每次进入 PV 时外部缓存的实际查找结果，避免仅凭画面推测 PVID 或文件命名问题。
@@ -587,11 +759,9 @@ void LyricManager::OnLyricsBegin() {
 	loadedPvid = static_cast<int>(pvsel->PVID);
 	LOG(L"开始加载 PV%d 的歌词", loadedPvid);
 	lyricIndex = 0;
-	internalLyricLine.clear();
 	lyricTimeline.clear();
-	nativeLyricTimeline.clear();
-	nativeTimelinePvid = loadedPvid;
-	activeNativeLyric.clear();
+	ClearRenderCache();
+	currentSingerIds.clear();
 	displayStatus = OnScreen;
 	lyricDisplayStatus = Ready;
 	if (useExternalLyrics) {
@@ -611,6 +781,9 @@ void LyricManager::OnLyricsBegin() {
 			const std::wstring rubyFilename = FullPathInDllFolder(L"lyrics\\" + std::wstring(buffer) + L".ruby.tsv");
 			if (!LoadRubySidecar(rubyFilename))
 				LOG(L"未找到或未加载 Ruby 旁路文件，将仅显示主歌词。");
+			const std::wstring singerFilename = FullPathInDllFolder(L"lyrics\\" + std::wstring(buffer) + L".singers.tsv");
+			if (!LoadSingerSidecar(singerFilename))
+				LOG(L"未加载有效歌手标记，本首未标记行使用默认颜色。");
 			return;
 		}
 		else {
@@ -621,29 +794,14 @@ void LyricManager::OnLyricsBegin() {
 	else {
 		WriteRuntimeLyricLoadDiagnostic(pvsel->PVID, L"", "external_disabled", 0);
 	}
-	LOG(L"使用 PV%d 的游戏字符集。", pvsel->PVID);
-	std::wstring buffer;
-	if (FontManager_Inst.PVDB_Buffer.count(pvsel->PVID)) {
-		if (FontManager_Inst.PVDB_Charset_Buffer.count(pvsel->PVID) <= 0) {
-			std::wstring buffer = to_wstr(FontManager_Inst.PVDB_Buffer[pvsel->PVID]);
-			ResetDefaultCharset();
-			if (FontManager_Inst.UpdateCharset(buffer))
-				FontManager_Inst.reloadFonts = true;
-			FontManager_Inst.PVDB_Charset_Buffer[pvsel->PVID] = FontManager_Inst.charset;
-		}
-		FontManager_Inst.charset = FontManager_Inst.PVDB_Charset_Buffer[pvsel->PVID];
-		FontManager_Inst.reloadFonts = true;
-
-	}
+	// 缺少完整缓存时不显示 KTV，无需采集游戏数据库或逐句补建图集。
 }
 
 // 在进入加载或选曲界面时清除本首歌词与曲目绑定。
 void LyricManager::OnLyricsEnd() {
-	if (!nativeLyricTimeline.empty())
-		nativeLyricTimeline.back().endMs = CurrentTimestampMs();
-	internalLyricLine.clear();
+	currentSingerIds.clear();
 	lyricTimeline.clear();
-	activeNativeLyric.clear();
+	ClearRenderCache();
 	displayStatus = NoLyric;
 	lyricDisplayStatus = Ended;
 	lyricIndex = 0;
@@ -743,6 +901,7 @@ void LyricManager::OnImGUI() {
 		ImGui::ColorEdit4("After fill", (float*)&ktvAfterFillColor);
 		ImGui::ColorEdit4("After stroke", (float*)&ktvAfterStrokeColor);
 		ImGui::ColorEdit4("After shadow", (float*)&ktvAfterShadowColor);
+		DrawSingerColorPanel();
 		ImGui::Separator();
 		ImGui::Text("Lyric Format");
 		ImGui::PushFont(FontManager_Inst.font);
@@ -788,8 +947,7 @@ void LyricManager::OnImGUI() {
 		ImDrawList* drawList = ImGui::GetForegroundDrawList();
 		const LyricLine* current = FindCurrentActiveLyric(timestampMs);
 		const LyricLine* next = FindNextActiveLyric(timestampMs);
-		const std::vector<KtvLineLayout> layouts = useExternalLyrics
-			? BuildKtvLineLayouts(lyricTimeline, ktvPreCueMs) : std::vector<KtvLineLayout>();
+		const std::vector<KtvLineLayout>& layouts = GetRenderLayouts();
 		if (next && !layouts.empty() && ShouldDrawKtvCountdown(current != nullptr, next->startMs - timestampMs)) {
 			const int nextLane = layouts[(size_t)(next - lyricTimeline.data())].lane;
 			const ImVec2 viewport = ImGui::GetMainViewport()->Size;
