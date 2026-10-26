@@ -34,7 +34,7 @@
 
 目标：https://github.com/HYDlink/DivaKaraoke 。保留上游origin的禁用推送设置，新增release远端，只推送审核过的main与v0.2.0，不使用mirror或force。
 
-当前Git命令行没有可用GitHub登录，GitHub插件也未连接。可以通过Git Credential Manager设备授权登录，凭据保存在系统中，不写入仓库。登录命令：
+2026-10-27用户完成GitHub登录后，已成功推送main和v0.2.0，并公开Release。独立仓库标志、默认分支及全部附件摘要已经复核。后续电脑可通过Git Credential Manager设备授权登录，凭据保存在系统中，不写入仓库。登录命令：
 
 ```powershell
 git credential-manager github login --username HYDlink --device
@@ -48,3 +48,7 @@ python scripts/publish_github_release.py \
 ```
 
 实际发布在上述命令追加--publish；若已完成网页授权，可以由助手继续执行。最终是否已公开必须以publication.json和远端实际结果为准，不能把本地ZIP当成GitHub Release已发布。
+
+## 公开发布完成（2026-10-27）
+
+Release：https://github.com/HYDlink/DivaKaraoke/releases/tag/v0.2.0 。源码标签固定d3822de，安装ZIP及两份校验清单均已上传并核对GitHub返回的SHA-256。原项目artifacts/releases/DivaKaraoke-v0.2.0保存publication.json、remote-verification.json与本地构建/安装凭据。README按用户提供的4K截图更新main，发布标签及安装包保持固定，不因后续首页展示变动重新生成。

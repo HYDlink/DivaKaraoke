@@ -6,7 +6,7 @@
 
 下载DivaKaraoke-v0.2.0-win64.zip，校验SHA256SUMS.txt，将DivaKaraoke目录放到游戏mods下；DML存在priority白名单时加入DivaKaraoke。需要Windows x64与Microsoft Visual C++ 2015–2022 x64运行库。
 
-先备份并停用旧MMFreeLyrics，不能同时加载两份DLL。保留旧freelyrics.toml设置文件名，迁移自己已有的配置、lyrics缓存和可使用的字体，必要时重新选择字体路径。详细步骤见docs/INSTALL.md。
+旧MMFreeLyrics目录可以保留；两者同时启用尚未完成兼容验证，建议每套游戏配置只启用一个，避免重复接管游戏入口。保留旧freelyrics.toml设置文件名，迁移自己已有的配置、lyrics缓存和可使用的字体，必要时重新选择字体路径。详细步骤见docs/INSTALL.md。
 
 公开包附带OFL日文字体、Janome 0.5.0、websocket-client 1.8.0及完整许可证，不携带商业字体、OBS私人密码、原始游戏CPK/DSC/音视频或完整文本数据库。公开包不预置游戏派生歌词缓存，请迁移自己的已有缓存或用随包工具从自己的游戏资料生成；未配置时间线时保留原生当前句回退。离线生成和OBS助手需要Python 3.11+，游戏DLL本身不需要Python。
 

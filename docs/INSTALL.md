@@ -7,11 +7,18 @@
 1. 先安装[DivaModLoader](https://github.com/blueskythlikesclouds/DivaModLoader)。
 2. 将Release安装ZIP里的`DivaKaraoke`文件夹解压到游戏`mods`目录。
 3. 若游戏根`config.toml`有`priority`白名单，加入`DivaKaraoke`。
-4. 旧`MMFreeLyrics`目录先备份，再设置其`config.toml`的`enabled=false`，确保只启用一个版本。不要同时加载两份DLL。
+4. 旧`MMFreeLyrics`目录可以保留。升级时建议先备份配置，再将旧Mod的`config.toml`设置为`enabled=false`；两者同时启用尚未完成兼容验证，建议每套游戏配置只启用一个，见下方共存说明。
 5. 新包保留`freelyrics.toml`设置文件名。迁移旧用户时，复制旧`freelyrics.toml`、`singer-colors.toml`、`audio-tools.toml`、`obs-tools.toml`及自有`lyrics`/`fonts`。字体路径可能需要在Ctrl+F中重选。不要用新包覆盖自己的配置。
 
 公开包附带Noto Sans JP及其OFL许可证，不含本机商业字体、OBS密码、游戏音视频、CPK、原始DSC或完整文本数据库。歌词缓存从用户自己的游戏/曲包生成，或迁移自己的既有缓存；本项目代码许可证不授予歌曲资源版权。没有时间线时只显示游戏触发的当前句，不会假造下一句。
 
+## 与 MMFreeLyrics 共存
+
+两个目录可以同时保留在`mods`下，也可以通过不同加载配置切换；不需要删除原版。DivaKaraoke不依赖或加载旧的`MMFreeLyrics.dll`。
+
+同时启用尚未完成兼容验证。DivaKaraoke沿用并扩展上游游戏集成，会扫描同类游戏函数的字节特征并安装Hook，例如歌词更新、歌词/标题绘制及输入处理，还会接管游戏窗口消息。更名DLL不会使这些游戏入口相互隔离。两者同时加载可能重复绘制歌词、响应快捷键或影响Hook链，不能保证同时启用正常。
+
+因此建议同一套游戏配置只启用一个。目录可以保留，新DLL也不依赖旧DLL；只隐藏旧Mod的歌词或面板并不等于卸载其Hook，应通过加载配置或旧Mod的`enabled=false`切换。
 ## 歌词与注音工具
 
 游戏DLL无需Python。离线导出和OBS助手需要Python 3.11或更新版本。源码用户运行`tools\setup_python_tools.cmd`安装固定版本Janome及websocket-client；发行包已包含这两个运行库。
