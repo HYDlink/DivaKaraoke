@@ -26,3 +26,6 @@ obs-helper.json
 *.log
 .env
 .env.*
+
+# 发布依赖下载、开放字体和构建结果由打包输入提供。
+/assets/

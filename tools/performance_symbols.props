@@ -4,11 +4,11 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <ProgramDataBaseFileName>$(IntDir)MMFreeLyrics.compile.pdb</ProgramDataBaseFileName>
+      <ProgramDataBaseFileName>$(IntDir)DivaKaraoke.compile.pdb</ProgramDataBaseFileName>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
-      <ProgramDatabaseFile>$(OutDir)MMFreeLyrics.pdb</ProgramDatabaseFile>
+      <ProgramDatabaseFile>$(OutDir)DivaKaraoke.pdb</ProgramDatabaseFile>
     </Link>
   </ItemDefinitionGroup>
   <!-- 基线源码在修改前留存；仅显式要求基线构建时替换编译输入。 -->

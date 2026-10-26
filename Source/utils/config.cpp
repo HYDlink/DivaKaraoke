@@ -49,7 +49,8 @@ void Config::LoadDefault() {
 
 #pragma warning( disable : 4244 )
 bool Config::Save() {
-	config = toml::parse(FullPathInDllFolder(L"freelyrics.toml"));
+	try { config = toml::parse(FullPathInDllFolder(L"freelyrics.toml")); }
+	catch (const std::exception&) { config = toml::value(toml::table{}); }
 	// 配置写入根级字段，避免 DivaModLoader 的旧 TOML 读取器跳过带自定义子表的 Mod。
 	if (config.contains("freelyrics"))
 		config.as_table().erase("freelyrics");

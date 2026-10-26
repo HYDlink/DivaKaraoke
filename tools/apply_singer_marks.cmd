@@ -5,7 +5,10 @@ set "SINGER_ROOT=%~dp0.."
 set "SINGER_OUTPUT=%SINGER_ROOT%\artifacts\exported-lyrics"
 if not exist "%SINGER_OUTPUT%\cache\export-manifest.json" set "SINGER_OUTPUT=%SINGER_ROOT%\artifacts\singer-full-export"
 set "SINGER_INSTALL=%SINGER_ROOT%\lyrics"
-if not exist "%SINGER_ROOT%\MMFreeLyrics.dll" set "SINGER_INSTALL=E:\SteamLibrary\steamapps\common\Hatsune Miku Project DIVA Mega Mix Plus\mods\MMFreeLyrics\lyrics"
+if not exist "%SINGER_ROOT%\DivaKaraoke.dll" (
+  echo 源码目录请显式提供 --install-dir，不能猜测其它电脑的游戏路径。
+  if "%~1"=="" exit /b 2
+)
 if not exist "%SINGER_OUTPUT%\cache\export-manifest.json" goto missing
 if not "%~1"=="" goto custom
 rem 仅重新应用歌手标记，人工文件保持独立，安装前仍预检所有歌词和旁路哈希。

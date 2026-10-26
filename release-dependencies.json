@@ -1,0 +1,23 @@
+{
+  "字体提交": "66a36c8c94b1a5d992ee4e7f392fccfe4945767c",
+  "文件": [
+    {
+      "来源": "https://raw.githubusercontent.com/microsoft/Detours/v4.0.1/LICENSE.md",
+      "文件": "LICENSES/Detours-MIT.txt",
+      "SHA256": "b301808b732cfaa60df2b4b422d78cd97d2a15058b207e7e33f0535ba5170dd6",
+      "字节": 1099
+    },
+    {
+      "来源": "https://raw.githubusercontent.com/google/fonts/66a36c8c94b1a5d992ee4e7f392fccfe4945767c/ofl/notosansjp/NotoSansJP%5Bwght%5D.ttf",
+      "文件": "assets/fonts/NotoSansJP.ttf",
+      "SHA256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+      "字节": 9589900
+    },
+    {
+      "来源": "https://raw.githubusercontent.com/google/fonts/66a36c8c94b1a5d992ee4e7f392fccfe4945767c/ofl/notosansjp/OFL.txt",
+      "文件": "LICENSES/Noto-Sans-JP-OFL.txt",
+      "SHA256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9",
+      "字节": 4388
+    }
+  ]
+}

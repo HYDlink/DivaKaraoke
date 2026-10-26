@@ -1,3 +1,7 @@
+# v0.2.0发布命名（2026-10-26）
+
+当前正式产物为DivaKaraoke.dll，安装目录mods/DivaKaraoke，工程Source/DivaKaraoke.sln与DivaKaraoke.vcxproj。freelyrics.toml保留以兼容用户设置；下文MMFreeLyrics是原第二阶段架构记录。游戏签名、结构体、Hook和生命周期不因更名改变。
+
 # 当前架构
 
 ## 上游基线

@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
     try {
         const auto root = std::filesystem::absolute("artifacts/lyric-playlist-build/fixtures");
         std::filesystem::create_directories(root / "lyrics");
-        wcscpy_s(DllFilePathBuffer, (root / "MMFreeLyrics.dll").c_str());
+        wcscpy_s(DllFilePathBuffer, (root / "DivaKaraoke.dll").c_str());
         WriteFixture(root / "lyrics/PV900001.srt", "1\n00:00:00,000 --> 00:00:02,000\n前曲\n\n");
         WriteFixture(root / "lyrics/PV900001.ruby.tsv", "1\t0:2:ぜんきょく\n");
         WriteFixture(root / "lyrics/PV900001.singers.tsv", "# singers-v1\t900001\t1\n# performer\t0\tMIK\n# performer\t1\tRIN\n1\t0\t2000\tMIK,RIN\t前曲\n");

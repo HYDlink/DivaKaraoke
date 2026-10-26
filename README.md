@@ -1,93 +1,31 @@
-# Hatsune Miku Project Diva Mega Mix+ (M39's+) FreeType Lyrics Renderer Mod
+# DivaKaraoke
 
-伴奏功能的支持范围及10首用户实测例外，见[伴奏模式支持说明](docs/NON_VOCAL_SUPPORT.md)。
+为《初音未来 Project DIVA Mega Mix+》提供双轨卡拉OK歌词、日文注音、行级歌手配色、伴奏与OBS录制辅助。
 
-本地录制展示里程碑、保存范围与恢复操作见 [本地版本记录与恢复](docs/LOCAL_VERSIONING.md)。当前仅保存本地版本，上游许可仍待确认。
+**v0.2.0基于2026-10-25第二阶段冻结版。** 使用整句卡拉OK推进，不包含第三版逐字对齐、音频模型或GPU实验。不同曲目的角色活动与伴奏声道存在例外，详见功能说明。
 
-当前本机 OBS 启动、连接故障处理及唯一日常入口见 [OBS 连接器说明](docs/OBS_CONNECTOR.md)。`artifacts/*/package` 是历史发布快照，其中的启动器不作为日常入口。
+- [安装与升级](docs/INSTALL.md)
+- [源码构建](docs/BUILD.md)
+- [v0.2.0发布记录](docs/RELEASE_V020.md)
+- [歌手配色与人工标记](docs/SINGER_EXPORT_WORKFLOW.md)
+- [伴奏支持范围](docs/NON_VOCAL_SUPPORT.md)
+- [OBS连接与录制](docs/OBS_CONNECTOR.md)
+- [授权与资源范围](LICENSING.md)、[第三方声明](THIRD_PARTY_NOTICES.md)
 
+## 使用
 
-当前本机 OBS 启动、连接故障处理及唯一日常入口见 [OBS 连接器说明](docs/OBS_CONNECTOR.md)。`artifacts/*/package` 是历史发布快照，其中的启动器不作为日常入口。
+从[Releases](https://github.com/HYDlink/DivaKaraoke/releases)下载，将DivaKaraoke目录放入游戏mods目录，并按安装说明配置DivaModLoader。公开包附带开放许可证日文字体；歌词使用你自己的缓存或从本机游戏导出。旧MMFreeLyrics必须停用，避免两套Hook同时加载。
 
-<div display="grid">
-<img style="width:45%" src="https://user-images.githubusercontent.com/31397301/189489519-19a77a4f-d947-4201-96fa-ae1f086ff787.png" />
-<img style="width:45%" src="https://user-images.githubusercontent.com/31397301/189489555-3f567519-b33d-4244-806f-524eb562a1c7.png" />
-<img style="width:45%" src="https://user-images.githubusercontent.com/31397301/189489391-a887004b-00d9-4fd6-923a-b59113445b83.png" />
-<img style="width:45%" src="https://user-images.githubusercontent.com/31397301/189489760-18595187-99ea-43e9-ad8a-77ecd0cf595d.png" />
-</div>
-<hr>
+| 快捷键 | 功能 |
+| --- | --- |
+| Ctrl+F | 字体设置 |
+| Ctrl+G | 歌词、歌手颜色及辅助工具 |
+| Ctrl+S / Ctrl+L | 保存 / 读取设置 |
 
-    本模块将利用 FreeType + ImGui 接管游戏对 PV 歌词的内部渲染，以达成更优的视觉体验
-    兼容版本 ： (All of them!...maybe)
+保留原项目的字体、描边、阴影、外挂SRT和样式功能，并增加双轨当前句/下一句、Ruby、分辨率缩放与曲目生命周期处理。伴奏控制与OBS自动录制均为可选功能。
 
-## 功能
-- 游戏内样式修改 (附带 ImGui)
-    - 字体热加载 （TTF/OTF/...)
-    - 字体大小
-    - 字体描边
-    - 字体投影
-    - 字体颜色
-    - 窗口样式
-    - ...
-- 配置文件支持
-- 兼容歌词 MOD
-- 兼容超长(76字)以上歌词
-- 加载外挂 `*.srt` 歌词
+## 来源与署名
 
-## MOD 安装
-- 配置 [DivaModLoader](https://github.com/blueskythlikesclouds/DivaModLoader)
-- 在 [Release](https://github.com/mos9527/MMFreeLyrics/releases) 下载本 MOD
-- 解压至游戏文件夹 `mods\MMFreeLyrics` 目录
-- 字体安装
-    - 在模组目录中创建文件夹 `fonts`，将自己想用的字体文件(`.ttf`,`.otf`) 放入其中
-        - 注：文件名最好使用英文。中文名称能够被使用，但字体名不会被正常显示。
-- 外挂字幕
-    - 在 MOD 目录新建 `lyrics` 文件夹
-    - 将准备好的字幕文件放入 lyrics
-    - 更名为 [PVID].srt
-        - PVID 可在游戏内歌词窗口得知
-    - 确定歌词窗口 `Attempt to load (and use) external SubRip Lyrics (applies on song start)` 打勾
-    - 字幕会在每次 PV / 节奏游戏 开始前加载并自动构建字库
-- 正确配置的模组目录应有如下结构
-    
-        HATSUNE MIKU PROJECT DIVA MEGA MIX PLUS\MODS\MMFREELYRICS
-        |   ...
-        │   config.toml*
-        │   MMFreeLyrics.dll*
-        └───lyrics                
-        |      PV231-English.srt
-        |       ...
-        └───fonts*
-                font_1.ttf
-                font_2.otf
-                ...
-       
+本项目是独立维护的GitHub仓库，基于[mos9527/MMFreeLyrics](https://github.com/mos9527/MMFreeLyrics)开发，基线提交`86ca9825bba1e3c6a84a48d05768de4d57288c18`；保留现有上游Git历史。感谢mos9527的原始开发及对源码、二进制修改和再分发的明确授权。此授权不等于上游对本项目维护或背书。
 
-### 热键
-|热键|功能|
-|-|-|
-Ctrl+F|打开游戏内字体窗口
-Ctrl+G|打开游戏内歌词窗口
-Ctrl+S|保存配置
-Ctrl+L|载入配置
-
-----
-
-## References
-https://github.com/ocornut/imgui
-
-https://github.com/ajkhoury/SigMaker-x64
-
-https://github.com/BroGamer4256/score-mm
-
-https://github.com/ActualMandM/DivaDllMods
-
-https://github.com/blueskythlikesclouds/DivaModLoader
-
-https://github.com/nastys/MEGAHAKUS
-
-https://github.com/saurabhshri/simple-yet-powerful-srt-subtitle-parser-cpp
-
-https://github.com/BroGamer4256/discord
-
-https://github.com/BroGamer4256/camera
+历史开发、研究、验证文档保留于docs。部分文档记录本机E/F盘路径和旧名称；当前安装与构建以本README链接的说明为准。歌曲、游戏、第三方曲包、用户字体及工具各自保留权利，不由本项目统一再授权。

@@ -225,11 +225,11 @@ void Config::LoadGlobalConfig() {
 
 // 将游戏内实际扫描到的关键地址以稳定的 ASCII 格式落盘，供短启动后直接定位版本或初始化问题。
 void WriteSignatureDiagnostics() {
-	std::ofstream diagnostics(to_utf8(FullPathInDllFolder(L"freelyrics-diagnostics.log")), std::ios::trunc);
+	std::ofstream diagnostics(to_utf8(FullPathInDllFolder(L"divakaraoke-diagnostics.log")), std::ios::trunc);
 	if (!diagnostics.is_open())
 		return;
 
-	diagnostics << "MMFreeLyrics signature diagnostics\n";
+	diagnostics << "DivaKaraoke 签名诊断\n";
 	diagnostics << "sigChangeGameState=0x" << std::hex << (uint64_t)sigChangeGameStateAddr << "\n";
 	diagnostics << "sigRenderLyricAndTitle=0x" << std::hex << (uint64_t)sigRenderLyricAndTitleAddr << "\n";
 	diagnostics << "sigLoadSongAudio=0x" << std::hex << (uint64_t)sigLoadSongAudioAddr << "\n";
@@ -244,7 +244,7 @@ void WriteSignatureDiagnostics() {
 
 // 追加 Init 的阶段标记，便于在游戏提前退出后确定最后成功执行的位置。
 void WriteInitializationStage(const char* stage) {
-	std::ofstream diagnostics(to_utf8(FullPathInDllFolder(L"freelyrics-diagnostics.log")), std::ios::app);
+	std::ofstream diagnostics(to_utf8(FullPathInDllFolder(L"divakaraoke-diagnostics.log")), std::ios::app);
 	if (diagnostics.is_open())
 		diagnostics << "stage=" << stage << "\n";
 }

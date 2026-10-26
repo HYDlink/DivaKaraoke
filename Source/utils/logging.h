@@ -18,7 +18,7 @@ inline void wprintf_(const wchar_t* fmt, ...) {
 
 #define LOG(fmt,...) \
 	{ \
-		wprintf_(L"[FreeLyrics] "); \
+		wprintf_(L"[DivaKaraoke] "); \
 		wprintf_(fmt,__VA_ARGS__); \
 		wprintf_(L"\n"); \
 	}
