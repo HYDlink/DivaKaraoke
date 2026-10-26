@@ -15,3 +15,18 @@ Detours随仓库保存4.0.1头文件与预编译x64静态库，保留MIT通知�
 运行`tools/setup_python_tools.cmd`准备Python外围工具依赖。游戏DLL不需要Python、CUDA或任何声学模型，v0.2.0没有第三版口型逐字、音频逐字及相关GPU依赖。
 
 发布打包入口与验证记录见`RELEASE_V020.md`。历史测试脚本里仍保留原开发路径，不能当作新电脑的一键验收入口；它们作为有价值的研究工具保留。正式构建和发行安装入口均使用上述可迁移路径。
+
+## 从源码重建公开安装包
+
+先运行tools/build_release.cmd和tools/setup_python_tools.cmd，然后使用以下Git Bash命令。输出目录必须是新的，打包器不覆盖已有同名ZIP。
+
+```bash
+python scripts/prepare_release_assets.py
+python scripts/package_public_release.py \
+  --output-dir artifacts/public-release-v020
+python scripts/verify_public_package.py \
+  --zip artifacts/public-release-v020/DivaKaraoke-v0.2.0-win64.zip \
+  --output-dir "artifacts/全新安装检查"
+```
+
+GitHub自动生成的Source ZIP不包含子模块源码，开发者请使用带--recurse-submodules的git clone。上述源码构建使用固定依赖，但不宣称不同编译器/时间/路径产生逐字节一致的DLL。

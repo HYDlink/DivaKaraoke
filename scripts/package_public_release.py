@@ -52,7 +52,7 @@ def gather(build: Path, assets: Path) -> dict[str, bytes]:
         if not base.is_dir():
             raise ValueError("缺少固定版本Python工具运行库，请运行tools/setup_python_tools.cmd。")
         for path in sorted(base.rglob("*")):
-            if path.is_file() and "__pycache__" not in path.parts and path.suffix not in {".pyc", ".pyo"}:
+            if path.is_file() and "__pycache__" not in path.parts and path.suffix not in {".pyc", ".pyo"} and not any(part in {"tests", "test"} for part in path.relative_to(base).parts):
                 files[path.relative_to(ROOT).as_posix()] = path.read_bytes()
     for name in ("tools/furigana_runtime/Janome-0.5.0.dist-info/LICENSE.txt", "tools/furigana_runtime/Janome-0.5.0.dist-info/NOTICE.txt",
                  "tools/obs_runtime/websocket_client-1.8.0.dist-info/LICENSE"):

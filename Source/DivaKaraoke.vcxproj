@@ -204,7 +204,7 @@
       <EnableUAC>false</EnableUAC>
       <AdditionalDependencies>..\Dependencies\detours\lib\detours.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-    
+
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -231,7 +231,7 @@
       <AdditionalDependencies>..\Dependencies\detours\lib\detours.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
-    
+
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Build Mod Archive|x64'">
     <ClCompile>
@@ -257,7 +257,7 @@
       <AdditionalDependencies>..\Dependencies\detours\lib\detours.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
     </Link>
-    
+
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\Dependencies\imgui\backends\imgui_impl_dx11.h" />
