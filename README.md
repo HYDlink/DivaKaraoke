@@ -2,6 +2,8 @@
 
 为《初音未来 Project DIVA Mega Mix+》提供双轨卡拉 OK 歌词、日文注音、歌手配色，以及伴奏与 OBS 录制辅助。
 
+**Vibe Coding 项目。** 新增代码与文档大量使用 AI 辅助生成，由维护者组织、测试和维护。上游代码保留原作者署名。
+
 **当前维护版：[v0.2.1](https://github.com/HYDlink/DivaKaraoke/releases/tag/v0.2.1)** · [下载安装包](https://github.com/HYDlink/DivaKaraoke/releases/download/v0.2.1/DivaKaraoke-v0.2.1-win64.zip) · [安装与升级](docs/INSTALL.md)
 
 ## 效果预览
@@ -59,4 +61,4 @@ v0.2.x 使用整句时间推进。歌手活动只作为声部推测，剧情中�
 
 第三方依赖、字体、歌曲及游戏资源各自保留权利，授权范围见 [LICENSING.md](LICENSING.md)。本项目并非 SEGA、Crypton 或原 MMFreeLyrics 作者的官方产品。
 
-开发者请读[贡献指南](CONTRIBUTING.md)。设备目录填写自己的 `.local/environment.toml`，不需要修改公共文档；页面中的用户指南均按当前使用流程维护。
+需要使用离线工具时，在自己的 `.local/environment.toml` 中填写目录即可，不用修改公共文档。

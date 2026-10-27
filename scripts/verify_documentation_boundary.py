@@ -44,7 +44,7 @@ def readme_graph() -> set[Path]:
             candidate = (path.parent / target.split("#", 1)[0]).resolve()
             if not candidate.is_relative_to(ROOT) or not candidate.exists():
                 raise ValueError("README可达链接越界或不存在：" + target)
-            if candidate.is_relative_to(ROOT / "docs/archive") or candidate.is_relative_to(ROOT / ".local"):
+            if any(candidate.is_relative_to(ROOT / folder) for folder in ("docs/archive", "docs/development", "docs/specs", ".local")):
                 raise ValueError("README可达入口重新导向历史流水或私有上下文：" + target)
             pending.append(candidate)
     return visited
@@ -53,7 +53,7 @@ def readme_graph() -> set[Path]:
 def main() -> int:
     """检查文档、Git忽略边界与真实打包输入，拒绝私有内容注入。"""
     sys.stdout.reconfigure(encoding="utf-8")
-    public = [ROOT / "README.md", ROOT / "AGENTS.md", ROOT / "CONTRIBUTING.md", *sorted((ROOT / "docs").rglob("*.md"))]
+    public = [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").rglob("*.md"))]
     for path in public:
         text = path.read_text(encoding="utf-8")
         if LOCAL_PATH.search(text):
@@ -81,7 +81,7 @@ def main() -> int:
             raise ValueError("玩家安装包重新收录了历史或私有上下文：" + name)
         if Path(name).suffix.lower() in {".md", ".py", ".cmd", ".toml", ".json"} and LOCAL_PATH.search(data.decode("utf-8", errors="replace")):
             raise ValueError("玩家安装包文本仍有设备绝对路径：" + name)
-    for prohibited in (".local/environment.toml", "docs/archive/private-note.md", "docs/STATUS.md"):
+    for prohibited in (".local/environment.toml", "docs/archive/private-note.md", "docs/STATUS.md", "docs/development/AGENT_WORKFLOW.md", "docs/specs/README.md"):
         try:
             package.validate({**files, prohibited: b"test"})
         except ValueError:
