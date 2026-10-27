@@ -1,46 +1,61 @@
 # 安装与升级
 
-需要Microsoft Visual C++ 2015–2022 x64运行库（https://aka.ms/vs/17/release/vc_redist.x64.exe）。适用Windows x64版Project DIVA Mega Mix+及DivaModLoader。v0.2.0使用2026-10-25第二阶段冻结基线，包含双轨KTV、Ruby日文注音、歌手配色、伴奏和OBS辅助，不包含逐字时间算法。
+## 安装前需要什么
 
-## 普通玩家
+- Windows x64 版《Project DIVA Mega Mix+》。
+- 已安装并启用 [DivaModLoader](https://github.com/blueskythlikesclouds/DivaModLoader)。
+- [Microsoft Visual C++ 2015–2022 x64 运行库](https://aka.ms/vs/17/release/vc_redist.x64.exe)。
 
-1. 先安装[DivaModLoader](https://github.com/blueskythlikesclouds/DivaModLoader)。
-2. 将Release安装ZIP里的`DivaKaraoke`文件夹解压到游戏`mods`目录。
-3. 若游戏根`config.toml`有`priority`白名单，加入`DivaKaraoke`。
-4. 旧`MMFreeLyrics`目录可以保留。升级时建议先备份配置，再将旧Mod的`config.toml`设置为`enabled=false`；两者同时启用尚未完成兼容验证，建议每套游戏配置只启用一个，见下方共存说明。
-5. 新包保留`freelyrics.toml`设置文件名。迁移旧用户时，复制旧`freelyrics.toml`、`singer-colors.toml`、`audio-tools.toml`、`obs-tools.toml`及自有`lyrics`/`fonts`。字体路径可能需要在Ctrl+F中重选。不要用新包覆盖自己的配置。
+游戏中的歌词显示不需要 Python。离线歌词工具和 OBS 助手需要 Python 3.11 或更新版本。
 
-公开包附带Noto Sans JP及其OFL许可证，不含本机商业字体、OBS密码、游戏音视频、CPK、原始DSC或完整文本数据库。歌词缓存从用户自己的游戏/曲包生成，或迁移自己的既有缓存；本项目代码许可证不授予歌曲资源版权。没有时间线时只显示游戏触发的当前句，不会假造下一句。
+## 安装
 
-## 与 MMFreeLyrics 共存
+1. 从 [Releases](https://github.com/HYDlink/DivaKaraoke/releases) 下载 `DivaKaraoke-版本号-win64.zip`，不要把 GitHub 自动生成的 Source code ZIP 当安装包。
+2. 将压缩包中的整个 `DivaKaraoke` 文件夹解压到你自己的游戏 `mods` 目录。
+3. 如果游戏根目录的 DML `config.toml` 配有 `priority` 白名单，将 `DivaKaraoke` 加入列表。没有这个字段则不必为本 Mod 新建它。
+4. 启动游戏，按 **Ctrl+F** 或 **Ctrl+G**，确认能打开设置面板。
 
-两个目录可以同时保留在`mods`下，也可以通过不同加载配置切换；不需要删除原版。DivaKaraoke不依赖或加载旧的`MMFreeLyrics.dll`。
+安装后的关键文件如下，目录从你自己的游戏位置开始：
 
-同时启用尚未完成兼容验证。DivaKaraoke沿用并扩展上游游戏集成，会扫描同类游戏函数的字节特征并安装Hook，例如歌词更新、歌词/标题绘制及输入处理，还会接管游戏窗口消息。更名DLL不会使这些游戏入口相互隔离。两者同时加载可能重复绘制歌词、响应快捷键或影响Hook链，不能保证同时启用正常。
-
-因此建议同一套游戏配置只启用一个。目录可以保留，新DLL也不依赖旧DLL；只隐藏旧Mod的歌词或面板并不等于卸载其Hook，应通过加载配置或旧Mod的`enabled=false`切换。
-## 歌词与注音工具
-
-游戏DLL无需Python。离线导出和OBS助手需要Python 3.11或更新版本。源码用户运行`tools\setup_python_tools.cmd`安装固定版本Janome及websocket-client；发行包已包含这两个运行库。
-
-复用已有FarcPack/MM+ CPK提取结果，不自行实现CPK解析器。第三方工具来源见`THIRD_PARTY_NOTICES.md`。准备`MikuMikuLibrary/FarcPack.exe`及`artifacts/Open-PD-Script-Editor/opcode_db/db.json`，或通过对应参数指定。官方提取目录应包含`diva_main`、`diva_main_region`以及已拥有DLC对应目录。提取方法及来源映射见`LYRICS_EXPORTER_MVP.md`、`EXTRACTED_ASSET_REUSE.md`，其中E/F盘路径只是开发历史记录，不能直接照抄。
-
-下面多行命令使用Git Bash语法；PowerShell/CMD可把整段写成一行：
-
-```bash
-python scripts/export_lyrics.py \
-  --game-dir "D:/SteamLibrary/steamapps/common/Hatsune Miku Project DIVA Mega Mix Plus" \
-  --extracted-root "D:/DivaAssets" \
-  --farcpack "D:/Tools/MikuMikuLibrary/FarcPack.exe" \
-  --opcode-db "D:/Tools/Open-PD-Script-Editor/opcode_db/db.json" \
-  --output-dir artifacts/exported-lyrics \
-  --install-dir "D:/SteamLibrary/steamapps/common/Hatsune Miku Project DIVA Mega Mix Plus/mods/DivaKaraoke/lyrics"
+```text
+mods/
+└─ DivaKaraoke/
+   ├─ DivaKaraoke.dll
+   ├─ config.toml
+   ├─ fonts/
+   ├─ lyrics/
+   ├─ tools/
+   └─ scripts/
 ```
 
-高级曲包映射使用`--source-manifest`，相对路径以清单目录为基准。导出器保护用户手改文件，发现冲突会拒绝整批覆盖。歌手活动只是推测，剧情无声口型等例外仍需人工标记。
+## 准备歌词
 
-## OBS与伴奏
+发行包提供开放许可证日文字体，不预置游戏派生歌词缓存。
 
-在OBS启用WebSocket服务，复制`tools/obs-helper.example.json`为`tools/obs-helper.json`，填写本机OBS密码，再启动`tools/start_obs_helper.cmd`。密码只保存在你的电脑，不提交Git。录制行为见`OBS_CONNECTOR.md`；伴奏支持范围见`NON_VOCAL_SUPPORT.md`。
+- 已有自己的缓存：把 `PV编号.srt`、同曲的 `.ruby.tsv` 和可选 `.singers.tsv` 放入 `lyrics`。
+- 还没有缓存：按[歌词工具](LYRICS_EXPORT.md)从自己拥有的游戏/曲包资料生成。
+- 只有 SRT：可以显示行级歌词；注音和歌手配色需要对应旁路文件。
+- 没有完整时间线：使用原生当前句回退，不能预显示还未取得的下一句。
 
-Ctrl+F字体、Ctrl+G歌词及工具、Ctrl+S保存、Ctrl+L读取配置。声音与录制最终效果必须在实际游戏和OBS中验收。
+先播放一首你已准备缓存的歌曲，确认当前句、下一句和读音显示正确，再调整样式。
+
+## 升级与迁移
+
+先退出游戏，备份旧 Mod 的配置、`lyrics` 和自有 `fonts`。从旧版迁移时保留需要的 `freelyrics.toml`、`singer-colors.toml`、`audio-tools.toml`、`obs-tools.toml`，不要用默认文件覆盖自己改过的设置。更换目录后如字体未生效，在 Ctrl+F 中重新选择字体并保存。
+
+### 与 MMFreeLyrics 共存
+
+两个目录可以同时保留，不需要删除原版。DivaKaraoke 不依赖旧 `MMFreeLyrics.dll`。
+
+两者会接管部分相同的游戏入口，同时启用尚未完成兼容验证，可能重复显示歌词或响应快捷键。**建议每套游戏配置只启用一个。** 可在旧 Mod 的 `config.toml` 中设 `enabled=false`，或通过你使用的 DML 加载配置切换。只隐藏面板不等于停用 Hook。
+
+## 常用操作
+
+| 按键 | 功能 |
+| --- | --- |
+| Ctrl+F | 字体、字号、描边和阴影 |
+| Ctrl+G | 歌词布局、歌手配色、伴奏和录制工具 |
+| Ctrl+S | 保存设置 |
+| Ctrl+L | 重新读取设置 |
+
+下一步：[OBS 录制](OBS_CONNECTOR.md) · [伴奏模式](NON_VOCAL_SUPPORT.md) · [歌手配色](SINGER_EXPORT_WORKFLOW.md) · [常见问题](TROUBLESHOOTING.md)

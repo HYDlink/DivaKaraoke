@@ -18,7 +18,6 @@ from export_lyrics import ChineseArgumentParser
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "HYDlink/DivaKaraoke"
 REMOTE = "https://github.com/" + REPOSITORY + ".git"
-TAG = "v0.2.0"
 ENVIRONMENT = dict(os.environ, GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
 
 
@@ -62,7 +61,7 @@ def api(token: str, method: str, url: str, value: dict | bytes | None = None, co
 def main() -> int:
     """先检查精确源码、安装包和干净验证凭据，显式发布时才修改远端。"""
     sys.stdout.reconfigure(encoding="utf-8")
-    parser = ChineseArgumentParser(description="预检或发布DivaKaraoke v0.2.0。默认只做本地预检。", add_help=False)
+    parser = ChineseArgumentParser(description="预检或发布清单对应版本的DivaKaraoke。默认只做本地预检。", add_help=False)
     parser.add_argument("-h", "--help", action="help", help="显示中文帮助。")
     # 发布目录参数：只上传已验证ZIP、校验值、文件清单和安装说明，不上传其它文件。
     parser.add_argument("--release-dir", type=Path, required=True, help="最终公开安装包、SHA256SUMS和验证凭据目录。")
@@ -77,8 +76,10 @@ def main() -> int:
         raise ValueError("当前源码包含第三版逐字实现，不是用户选择的第二版。")
     directory = args.release_dir.resolve()
     manifest = json.loads((directory / "release-manifest.json").read_text(encoding="utf-8"))
+    # 版本参数来自已验证清单，避免把维护版附件上传到旧标签。
+    tag = "v" + manifest["版本"]
     verification = json.loads((directory / "package-verification.json").read_text(encoding="utf-8"))
-    archive = directory / "DivaKaraoke-v0.2.0-win64.zip"
+    archive = directory / ("DivaKaraoke-" + tag + "-win64.zip")
     with archive.open("rb") as stream:
         archive_hash = hashlib.file_digest(stream, "sha256").hexdigest()
     if manifest["源码提交"] != commit or verification["源码提交"] != commit or verification["ZIP_SHA256"] != archive_hash:
@@ -100,17 +101,17 @@ def main() -> int:
     elif git("remote", "get-url", "release") != REMOTE:
         raise ValueError("release远端地址不符合用户指定仓库。")
     git("push", "release", "HEAD:refs/heads/main")
-    if git("tag", "--list", TAG):
-        if git("rev-parse", TAG + "^{}") != commit:
-            raise ValueError("本地v0.2.0标签已经指向其它提交，未改写标签。")
+    if git("tag", "--list", tag):
+        if git("rev-parse", tag + "^{}") != commit:
+            raise ValueError("本地版本标签已经指向其它提交，未改写标签。")
     else:
-        git("tag", "-a", TAG, "-m", "DivaKaraoke第二阶段v0.2.0")
-    git("push", "release", "refs/tags/" + TAG)
-    release = api(token, "GET", base + "/releases/tags/" + TAG)
+        git("tag", "-a", tag, "-m", "DivaKaraoke " + tag)
+    git("push", "release", "refs/tags/" + tag)
+    release = api(token, "GET", base + "/releases/tags/" + tag)
     if release is None:
         release = api(token, "POST", base + "/releases", {
-            "tag_name": TAG, "target_commitish": commit, "name": "DivaKaraoke v0.2.0 · 第二阶段基线",
-            "body": (ROOT / "docs/RELEASE_NOTES_V020.md").read_text(encoding="utf-8"), "draft": True, "prerelease": False})
+            "tag_name": tag, "target_commitish": commit, "name": "DivaKaraoke " + tag,
+            "body": (ROOT / "docs/RELEASE_NOTES.md").read_text(encoding="utf-8"), "draft": True, "prerelease": False})
     # 先在草稿中上传并核对摘要；重复执行不删除已有资产，也不覆盖不同内容。
     existing = {item["name"]: item for item in release.get("assets", [])}
     uploaded = []
@@ -126,9 +127,17 @@ def main() -> int:
         uploaded.append({"名称": path.name, "SHA256": expected[7:], "链接": item["browser_download_url"]})
     if release.get("draft"):
         release = api(token, "PATCH", base + "/releases/" + str(release["id"]), {"draft": False, "make_latest": "true"})
-    result = {"状态": "已同步并发布", "提交": commit, "标签": TAG, "Release": release["html_url"], "附件": uploaded}
+    # 草稿转公开后附件URL可能变化，重新读取元数据再保存公开链接。
+    release = api(token, "GET", base + "/releases/" + str(release["id"]))
+    final_assets = {item["name"]: item for item in release["assets"]}
+    for item in uploaded:
+        current = final_assets[item["名称"]]
+        if current.get("digest") != "sha256:" + item["SHA256"]:
+            raise ValueError("公开后附件摘要发生变化，停止确认发布结果。")
+        item["链接"] = current["browser_download_url"]
+    result = {"状态": "已同步并发布", "提交": commit, "标签": tag, "Release": release["html_url"], "附件": uploaded}
     (directory / "publication.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print("源码、完整祖先历史与v0.2.0已发布：" + release["html_url"])
+    print("源码、祖先历史与版本已发布：" + release["html_url"])
     return 0
 
 

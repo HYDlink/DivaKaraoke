@@ -1,6 +1,6 @@
 name = "DivaKaraoke"
 author = "HYDlink；基于 mos9527/MMFreeLyrics"
-version = "0.2.0"
-description = "双轨卡拉OK歌词、日文注音、行级歌手配色、伴奏与OBS录制辅助。第二阶段稳定基线，不含逐字对齐。"
+version = "0.2.1"
+description = "双轨卡拉OK歌词、日文注音、行级歌手配色、伴奏与OBS录制辅助。"
 enabled = true
 dll = ["DivaKaraoke.dll"]

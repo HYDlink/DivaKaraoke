@@ -2,7 +2,7 @@
 
 为《初音未来 Project DIVA Mega Mix+》提供双轨卡拉 OK 歌词、日文注音、歌手配色，以及伴奏与 OBS 录制辅助。
 
-**当前版本：[v0.2.0](https://github.com/HYDlink/DivaKaraoke/releases/tag/v0.2.0)** · [下载安装包](https://github.com/HYDlink/DivaKaraoke/releases/download/v0.2.0/DivaKaraoke-v0.2.0-win64.zip) · [安装与升级](docs/INSTALL.md)
+**当前维护版：[v0.2.1](https://github.com/HYDlink/DivaKaraoke/releases/tag/v0.2.1)** · [下载安装包](https://github.com/HYDlink/DivaKaraoke/releases/download/v0.2.1/DivaKaraoke-v0.2.1-win64.zip) · [安装与升级](docs/INSTALL.md)
 
 ## 效果预览
 
@@ -14,7 +14,7 @@
 
 视频展示歌词和歌手配色效果，不包含工具操作教程。
 
-> 截图来自开发环境。v0.2.0 提供整句渐变、双轨布局、注音与歌手配色；图中面板的“实验逐字填唱”与“方案 B：音频对齐”选项属于后续实验，未包含在本次发布中。
+> 截图来自开发环境。v0.2.x 提供整句渐变、双轨布局、注音与歌手配色；图中面板的“实验逐字填唱”与“方案 B：音频对齐”选项属于后续实验，未包含在本次发布中。
 
 ## 功能
 
@@ -46,11 +46,12 @@
 - [歌手配色与人工标记](docs/SINGER_EXPORT_WORKFLOW.md)
 - [伴奏支持范围](docs/NON_VOCAL_SUPPORT.md)
 - [OBS 连接与录制](docs/OBS_CONNECTOR.md)
+- [常见问题](docs/TROUBLESHOOTING.md)
 - [从源码构建](docs/BUILD.md)
-- [v0.2.0 发布说明与验证记录](docs/RELEASE_V020.md)
+- [版本说明](docs/RELEASE_V020.md)
 - [授权与资源范围](LICENSING.md) · [第三方声明](THIRD_PARTY_NOTICES.md)
 
-v0.2.0 使用整句时间推进。歌手活动只作为声部推测，剧情中的无声口型、缺少动作等情况仍需人工校对；伴奏功能受曲目原始声道结构限制。没有外部时间线时保留原生当前句回退。具体边界见对应功能文档。
+v0.2.x 使用整句时间推进。歌手活动只作为声部推测，剧情中的无声口型、缺少动作等情况仍需人工校对；伴奏功能受曲目原始声道结构限制。没有外部时间线时保留原生当前句回退。具体边界见对应功能文档。
 
 ## 来源与署名
 
@@ -58,4 +59,4 @@ v0.2.0 使用整句时间推进。歌手活动只作为声部推测，剧情中�
 
 第三方依赖、字体、歌曲及游戏资源各自保留权利，授权范围见 [LICENSING.md](LICENSING.md)。本项目并非 SEGA、Crypton 或原 MMFreeLyrics 作者的官方产品。
 
-历史开发与研究文档保留于 `docs`。其中的本机路径和旧名称用于记录历史；当前安装与构建以本 README 链接的说明为准。
+开发者请读[贡献指南](CONTRIBUTING.md)。设备目录填写自己的 `.local/environment.toml`，不需要修改公共文档；页面中的用户指南均按当前使用流程维护。

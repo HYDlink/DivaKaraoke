@@ -1,0 +1,23 @@
+# 复制为 .local/environment.toml，再填写这台设备的目录。
+# 不要把实际目录改到这个示例中；.local/不会提交到Git。
+# 相对路径按项目或Mod根目录解释；Windows路径建议使用正斜杠。
+# 这里不保存OBS密码、GitHub令牌或其他认证信息。
+[paths]
+# 游戏根目录，内有DivaMegaMix.exe。
+game_dir = ""
+# 已有官方提取树的共同父目录，允许留空改用独立来源清单。
+extracted_root = ""
+# 已有FarcPack可执行文件。
+farcpack = ""
+# 已有Open-PD-Script-Editor的opcode_db/db.json。
+opcode_db = ""
+# 可选逐包来源清单；只复用已有提取数据。
+source_manifest = ""
+# 输出结果目录：保存生成缓存和报告，不会仅因填写而写入游戏。
+output_dir = "artifacts/exported-lyrics"
+# 可选安装目标lyrics目录，仅在显式安装或应用操作中使用。
+install_dir = ""
+# 人工歌手修订目录，留空时使用输出目录下manual-singers。
+manual_singers_dir = ""
+# Janome运行库默认位于tools/furigana_runtime。
+janome_path = "tools/furigana_runtime"

@@ -13,6 +13,8 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+from local_environment import configuration_path, load_environment
+
 ROOT = Path(__file__).resolve().parents[1]
 DB_PATTERN = re.compile(r"^pv_(\d+)\.difficulty\.normal\.0\.script_file_name=(.+)$")
 for stream in (sys.stdout, sys.stderr):
@@ -25,7 +27,7 @@ class ChineseArgumentParser(argparse.ArgumentParser):
 
     def format_help(self) -> str:
         """将自动帮助的用途和选项标题转换为中文。"""
-        return super().format_help().replace("usage: ", "用法：").replace("options:", "选项：")
+        return super().format_help().replace("usage: ", "用法：").replace("options:", "选项：").replace("positional arguments:", "位置参数：")
 
     def format_usage(self) -> str:
         """将参数错误时的用法标题转换为中文。"""
@@ -33,21 +35,33 @@ class ChineseArgumentParser(argparse.ArgumentParser):
 
     def error(self, message: str) -> None:
         """以中文错误前缀呈现缺失、未知或无效参数。"""
-        message = message.replace("the following arguments are required:", "缺少必需参数：").replace("unrecognized arguments:", "未知参数：").replace("expected one argument", "需要一个参数值")
+        message = message.replace("the following arguments are required:", "缺少必需参数：").replace("unrecognized arguments:", "未知参数：").replace("expected one argument", "需要一个参数值").replace("invalid choice:", "无效选项：").replace("(choose from", "（可选值：").replace("argument ", "参数 ")
         self.print_usage(sys.stderr)
         self.exit(2, f"参数错误：{message}\n")
 
 
 def arguments() -> argparse.Namespace:
     """解析游戏输入、输出文件与显式安装参数。"""
+    preliminary = ChineseArgumentParser(add_help=False)
+    # 本地配置参数：显式指定优先于环境变量和默认私有文件。
+    preliminary.add_argument("--local-config", type=Path)
+    selected, _ = preliminary.parse_known_args()
+    try:
+        local = {} if any(flag in sys.argv for flag in ("-h", "--help")) else load_environment(
+            selected.local_config, required=selected.local_config is not None)
+    except ValueError as error:
+        preliminary.exit(2, "配置错误：" + str(error) + "\n")
     parser = ChineseArgumentParser(description="导出本机有效歌词缓存；默认只生成，不安装。", add_help=False)
     parser.add_argument("-h", "--help", action="help", help="显示帮助并退出。")
-    parser.add_argument("--game-dir", type=Path, help="包含 DivaMegaMix.exe 和 DML 配置的游戏根目录。")
-    parser.add_argument("--output-dir", type=Path, required=True, help="输出缓存、来源清单与报告的目录。")
+    # 本地配置参数：其中的实际目录不进入Git，也不改变命令行覆盖优先级。
+    parser.add_argument("--local-config", type=Path, default=selected.local_config, help="设备私有路径配置，默认.local/environment.toml。")
+    parser.add_argument("--game-dir", type=Path, default=local.get("game_dir"), help="包含 DivaMegaMix.exe 和 DML 配置的游戏根目录。")
+    # 输出结果目录参数：本地配置或命令行选择生成缓存及报告的目录。
+    parser.add_argument("--output-dir", type=Path, default=local.get("output_dir", ROOT / "artifacts/exported-lyrics"), help="输出缓存、来源清单与报告的目录。")
     parser.add_argument("--source-manifest", type=Path, help="高级来源清单；相对输入路径以清单目录为基准。")
-    parser.add_argument("--extracted-root", type=Path, help="可选已提取官方 CPK 根目录；支持 diva_main 或 main-extract 等已有目录名。")
-    parser.add_argument("--farcpack", type=Path, default=ROOT / "MikuMikuLibrary/FarcPack.exe", help="已有 FarcPack.exe 路径。")
-    parser.add_argument("--opcode-db", type=Path, default=ROOT / "artifacts/Open-PD-Script-Editor/opcode_db/db.json", help="已有 Future Tone opcode 数据库路径。")
+    parser.add_argument("--extracted-root", type=Path, default=local.get("extracted_root"), help="可选已提取官方 CPK 根目录；支持 diva_main 或 main-extract 等已有目录名。")
+    parser.add_argument("--farcpack", type=Path, default=local.get("farcpack", ROOT / "MikuMikuLibrary/FarcPack.exe"), help="已有 FarcPack.exe 路径。")
+    parser.add_argument("--opcode-db", type=Path, default=local.get("opcode_db", ROOT / "artifacts/Open-PD-Script-Editor/opcode_db/db.json"), help="已有 Future Tone opcode 数据库路径。")
     parser.add_argument("--discover-only", action="store_true", help="仅生成来源发现报告，不解包或转换。")
     parser.add_argument("--install-dir", type=Path, help="显式安装输出缓存到 lyrics 目录；保护自定义 SRT 和 Ruby TSV。")
     parser.add_argument("--install-only", action="store_true", help="仅安装输出目录内上次成功生成的缓存。")
@@ -55,9 +69,12 @@ def arguments() -> argparse.Namespace:
     # 歌手补齐参数：仅复用成功缓存自动扫描多身份PV，并应用独立人工修订。
     parser.add_argument("--rebuild-singers-only", action="store_true", help="仅补齐全部多身份PV的歌手标记，不重新生成歌词或注音。")
     # 人工歌手修订目录参数：默认使用输出目录下manual-singers，文件不进入自动缓存替换。
-    parser.add_argument("--manual-singers-dir", type=Path, help="可选人工歌手修订目录；默认输出目录/manual-singers。")
-    parser.add_argument("--janome-path", type=Path, default=ROOT / "tools/furigana_runtime", help="已有 Janome 离线运行库路径。")
+    parser.add_argument("--manual-singers-dir", type=Path, default=local.get("manual_singers_dir"), help="可选人工歌手修订目录；默认输出目录/manual-singers。")
+    parser.add_argument("--janome-path", type=Path, default=local.get("janome_path", ROOT / "tools/furigana_runtime"), help="已有 Janome 离线运行库路径。")
     result = parser.parse_args()
+    # 既有来源清单仅在明确绑定的游戏目录下复用，不按维护者个人目录判断。
+    result.known_source_manifest = local.get("source_manifest")
+    result.known_game_dir = local.get("game_dir")
     if not result.install_only and not result.rebuild_ruby_only and not result.rebuild_singers_only and not result.game_dir and not result.source_manifest:
         parser.error("需要 --game-dir 或 --source-manifest。")
     if result.install_only and not result.install_dir:
@@ -133,10 +150,11 @@ def discover_mods(game: Path) -> tuple[list[dict], list[dict]]:
 
 
 def official_roots(args: argparse.Namespace) -> list[Path]:
-    """优先复用本机既有清单中的官方解包树，绝不自动重复解包。"""
+    """复用显式本地配置绑定的官方提取树，不读取维护者的隐式目录。"""
     known = {}
-    manifest = ROOT / "artifacts/installed-native-lyric-sources.json"
-    if manifest.is_file() and args.extracted_root is None:
+    manifest = getattr(args, "known_source_manifest", None)
+    known_game = getattr(args, "known_game_dir", None)
+    if manifest and manifest.is_file() and args.extracted_root is None and args.game_dir == known_game:
         entries = json.loads(manifest.read_text(encoding="utf-8"))["sources"]
         for source in entries:
             if source["name"] == "官方基础包":
@@ -158,11 +176,6 @@ def official_roots(args: argparse.Namespace) -> list[Path]:
             target = next((path for path in (args.extracted_root / stem, args.extracted_root / aliases[stem]) if path.is_dir()), None)
         if target is None or not target.is_dir():
             raise ValueError(f"{stem} 尚无可复用提取树。请提供 --extracted-root 或高级清单；短入口不会自动全量解包。")
-        # 不把另一份游戏的本机历史树静默当作当前安装的来源。
-        if args.extracted_root is None:
-            default_game = Path("E:/SteamLibrary/steamapps/common/Hatsune Miku Project DIVA Mega Mix Plus")
-            if args.game_dir != default_game:
-                raise ValueError("游戏路径与本机历史来源不同，请显式提供 --extracted-root 或高级来源清单。")
         stat = cpk.stat()
         print(f"命中既有提取：{stem} → {target}；来源大小 {stat.st_size} 字节，修改时间指纹 {stat.st_mtime_ns}。")
         result.append(target)
@@ -256,9 +269,9 @@ def manifest_sources(path: Path, work: Path) -> list[dict]:
 
 def effective_known_sources(args: argparse.Namespace, work: Path, mods: list[dict], notes: list[dict]) -> list[dict] | None:
     """优先复用已验证逐包映射，并以当前启用目录筛选文本与排序来源。"""
-    manifest = ROOT / "artifacts/installed-native-lyric-sources.json"
-    default_game = Path("E:/SteamLibrary/steamapps/common/Hatsune Miku Project DIVA Mega Mix Plus")
-    if not manifest.is_file() or args.extracted_root or args.game_dir != default_game:
+    manifest = getattr(args, "known_source_manifest", None)
+    known_game = getattr(args, "known_game_dir", None)
+    if not manifest or not manifest.is_file() or args.extracted_root or args.game_dir != known_game:
         return None
     sources = manifest_sources(manifest, work)
     officials, selected, known_names = [], [], set()

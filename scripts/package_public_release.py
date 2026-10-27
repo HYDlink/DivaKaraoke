@@ -15,7 +15,20 @@ from export_lyrics import ChineseArgumentParser
 from audit_release_privacy import findings
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.2.0"
+VERSION = tomllib.loads((ROOT / "config.toml").read_text(encoding="utf-8-sig"))["version"]
+USER_DOCUMENTS = (
+    "README.md", "INSTALL.md", "OBS_CONNECTOR.md", "NON_VOCAL_SUPPORT.md",
+    "SINGER_EXPORT_WORKFLOW.md", "LYRICS_EXPORT.md", "TROUBLESHOOTING.md", "BUILD.md",
+    "ARCHITECTURE.md", "DECISIONS.md", "RELEASE_V020.md", "RELEASE_NOTES.md",
+    "specs/README.md", "specs/lyrics.md", "specs/tools.md", "specs/documentation.md",
+)
+DAILY_SCRIPTS = (
+    "export_lyrics.py", "local_environment.py", "run_local_tools.py",
+    "build_installed_native_lyric_caches.py", "build_native_lyric_caches.py",
+    "extract_and_build_native_lyric_caches.py", "extract_native_lyric_timeline.py",
+    "verify_native_lyric_cache.py", "deploy_native_lyric_caches.py",
+    "build_singer_timeline.py", "generate_furigana_sidecar.py", "furigana_alignment.py",
+)
 
 
 def digest(data: bytes) -> str:
@@ -26,7 +39,7 @@ def digest(data: bytes) -> str:
 def gather(build: Path, assets: Path) -> dict[str, bytes]:
     """以固定文件清单收集公开包，不从游戏安装目录或私有恢复ZIP打包。"""
     files = {}
-    for name in ("README.md", "LICENSING.md", "THIRD_PARTY_NOTICES.md", "config.toml", "release-dependencies.json"):
+    for name in ("README.md", "LICENSING.md", "THIRD_PARTY_NOTICES.md", "CONTRIBUTING.md", "config.toml", "release-dependencies.json"):
         files[name] = (ROOT / name).read_bytes()
     files["DivaKaraoke.dll"] = (build / "DivaKaraoke.dll").read_bytes()
     lock = json.loads((ROOT / "release-dependencies.json").read_text(encoding="utf-8"))
@@ -37,13 +50,17 @@ def gather(build: Path, assets: Path) -> dict[str, bytes]:
             if digest(data) != item["SHA256"]:
                 raise ValueError("开放字体与锁定SHA-256不一致。")
             files["fonts/" + font.name] = data
-    for directory in ("LICENSES", "docs", "scripts"):
-        for path in sorted((ROOT / directory).rglob("*")):
-            if path.is_file() and path.suffix.lower() in {".md", ".txt", ".py", ".png", ".json"} and "__pycache__" not in path.parts:
-                files[path.relative_to(ROOT).as_posix()] = path.read_bytes()
+    for path in sorted((ROOT / "LICENSES").glob("*.txt")):
+        files[path.relative_to(ROOT).as_posix()] = path.read_bytes()
+    for name in USER_DOCUMENTS:
+        files["docs/" + name] = (ROOT / "docs" / name).read_bytes()
+    files["docs/assets/divakaraoke-preview.png"] = (ROOT / "docs/assets/divakaraoke-preview.png").read_bytes()
+    for name in DAILY_SCRIPTS:
+        files["scripts/" + name] = (ROOT / "scripts" / name).read_bytes()
+    files["config/local.example.toml"] = (ROOT / "config/local.example.toml").read_bytes()
     # 保留使用入口；历史部署脚本与私有归档工具只留源码仓库，不放玩家安装目录。
     for name in ("obs_helper.py", "obs-helper.example.json", "obs-requirements.txt", "start_obs_helper.cmd", "start_obs_helper.bat",
-                 "export_lyrics.cmd", "build_singer_colors.cmd", "apply_singer_marks.cmd", "setup_python_tools.cmd"):
+                 "export_lyrics.cmd", "build_singer_colors.cmd", "apply_singer_marks.cmd", "install_lyrics.cmd", "setup_python_tools.cmd"):
         path = ROOT / "tools" / name
         if path.is_file():
             files["tools/" + name] = path.read_bytes()
@@ -76,6 +93,8 @@ def validate(files: dict[str, bytes]) -> None:
         path = Path(name)
         if path.is_absolute() or ".." in path.parts or path.name in {"obs-helper.json", ".git-credentials", ".env"} or path.suffix.lower() in {".cpk", ".dsc", ".ogg", ".wav", ".mp4", ".pdb"}:
             raise ValueError("公开包包含禁用路径或资源：" + name)
+        if ".local" in path.parts or name.startswith("docs/archive/") or name in {"docs/STATUS.md", "docs/PLAN.md", "docs/CURRENT_HANDOFF.md"}:
+            raise ValueError("公开包包含本地上下文或开发流水：" + name)
         if path.suffix.lower() in {".json", ".toml", ".ini", ".env"} and findings(data):
             raise ValueError("公开包配置命中认证规则，请人工脱敏：" + name)
 
@@ -83,7 +102,7 @@ def validate(files: dict[str, bytes]) -> None:
 def main() -> int:
     """读取构建、开放资产与输出路径，生成可追溯且可回读校验的安装包。"""
     sys.stdout.reconfigure(encoding="utf-8")
-    parser = ChineseArgumentParser(description="生成DivaKaraoke v0.2.0公开安装ZIP。", add_help=False)
+    parser = ChineseArgumentParser(description="生成当前版本DivaKaraoke公开安装ZIP。", add_help=False)
     parser.add_argument("-h", "--help", action="help", help="显示中文帮助。")
     # 构建输入参数：只接收本轮验证过的DivaKaraoke.dll，不读取游戏中的DLL。
     parser.add_argument("--build-dir", type=Path, default=ROOT / "artifacts/build/x64/Release", help="DLL构建输出目录。")
